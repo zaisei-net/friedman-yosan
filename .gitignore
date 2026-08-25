@@ -7,3 +7,6 @@ Thumbs.db
 # 取得先: https://www.bb.mof.go.jp/archive/reiwa8.html
 data/*.xlsx
 data/*.xls
+# 独自作成データは管理対象
+!data/yen_grid_daily.xlsx
+!data/working_v10.xlsx
