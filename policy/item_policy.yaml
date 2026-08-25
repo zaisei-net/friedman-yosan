@@ -1,0 +1,176 @@
+# フリードマン分類ポリシー定義
+# 各科目のフリードマン根拠番号・残存割合・措置・理由
+#
+# フリードマン「資本主義と自由」の政府役割:
+# 1: 法と秩序の維持
+# 2: 財産権の規定
+# 3: ルール修正手段
+# 4: 裁定
+# 5: 契約の履行強制
+# 6: 競争の促進
+# 7: 貨幣制度の枠組み
+# 8: 技術的独占への対抗
+# 9: 外部効果の克服
+# 10: 責任能力なき者の保護補足
+
+policies:
+
+  # === 削減不可（国債費） ===
+  - match: {ministry: 財務省, keyword: 国債費}
+    friedman: [5]
+    retain: 1.0
+    measure: 維持（削減不可）
+    note: 既発債の償還・利払いは法的義務（⑤）。財政縮小後は漸減。
+
+  # === 地方交付税 ===
+  - match: {ministry: 総務省, keyword: 地方交付税交付金}
+    friedman: []
+    retain: 0.3
+    measure: 大幅削減
+    note: 地方政府も同様改革を前提に、地方歳出半減後の必要交付額のみ。
+
+  # === 防衛 ===
+  - match: {ministry: 防衛省, keyword: ""}
+    friedman: [1]
+    retain: 1.0
+    measure: 維持
+    note: ①法と秩序（外部安全保障）はフリードマンも認める核心的政府機能。
+
+  # === 司法 ===
+  - match: {ministry: 裁判所, keyword: ""}
+    friedman: [4, 5]
+    retain: 1.0
+    measure: 維持
+    note: ④⑤裁定・契約履行強制は政府の核心機能。
+
+  - match: {ministry: 法務省, keyword: ""}
+    friedman: [1, 2, 4, 5]
+    retain: 1.0
+    measure: 維持
+    note: ①②④⑤法務・検察・矯正・登記はすべて政府の核心機能。
+
+  # === 警察・公安 ===
+  - match: {ministry: 内閣府, keyword: 警察}
+    friedman: [1]
+    retain: 1.0
+    measure: 維持
+    note: ①法と秩序の維持。
+
+  - match: {ministry: 内閣府, keyword: 公正取引}
+    friedman: [6]
+    retain: 1.0
+    measure: 維持
+    note: ⑥競争促進（独禁法執行）。
+
+  # === 社会保障 ===
+  - match: {ministry: 厚生労働省, keyword: 基礎年金拠出金}
+    friedman: []
+    retain: 0.0
+    measure: 廃止（NIT移行）
+    note: フリードマンは強制年金に反対。ネガティブ所得税で代替。
+
+  - match: {ministry: 厚生労働省, keyword: 医療保険給付}
+    friedman: []
+    retain: 0.0
+    measure: 廃止（民間医療保険へ）
+    note: 強制医療保険廃止。低所得者の医療はNITで対応。
+
+  - match: {ministry: 厚生労働省, keyword: 介護保険制度}
+    friedman: [10]
+    retain: 0.2
+    measure: 大幅縮小
+    note: ⑩重度要介護者への最低限保護のみ。民間・家族介護を原則。
+
+  - match: {ministry: 厚生労働省, keyword: 生活保護}
+    friedman: [10]
+    retain: 0.7
+    measure: 縮小（NIT一本化後）
+    note: ⑩最後のセーフティネット。NIT統合後は管理費減少。
+
+  - match: {ministry: 厚生労働省, keyword: 障害保健福祉}
+    friedman: [10]
+    retain: 0.7
+    measure: 縮小（重度障害者保護を維持）
+    note: ⑩重度障害者への保護は正当機能。
+
+  - match: {ministry: 厚生労働省, keyword: 感染症対策}
+    friedman: [9]
+    retain: 0.8
+    measure: 維持（縮小）
+    note: ⑨感染症は典型的な外部効果（負の外部性）。
+
+  - match: {ministry: 厚生労働省, keyword: ""}
+    friedman: [10]
+    retain: 0.2
+    measure: 大幅縮小
+    note: フリードマン範囲外の社会保障は廃止。⑩の最小限のみ。
+
+  # === 教育 ===
+  - match: {ministry: 文部科学省, keyword: 義務教育費国庫負担金}
+    friedman: [10]
+    retain: 0.7
+    measure: 縮小（バウチャー化移行）
+    note: フリードマンは教育バウチャー制を提唱。
+
+  - match: {ministry: 文部科学省, keyword: 国立大学法人運営費}
+    friedman: []
+    retain: 0.0
+    measure: 廃止（民営化）
+    note: 高等教育への補助はフリードマン否定。
+
+  - match: {ministry: 文部科学省, keyword: ""}
+    friedman: []
+    retain: 0.05
+    measure: 廃止
+    note: フリードマン範囲外の文教行政は廃止。
+
+  # === 農林水産 ===
+  - match: {ministry: 農林水産省, keyword: 治山}
+    friedman: [9]
+    retain: 0.7
+    measure: 縮小
+    note: ⑨山地崩壊・土砂流出の外部効果。
+
+  - match: {ministry: 農林水産省, keyword: ""}
+    friedman: []
+    retain: 0.0
+    measure: 廃止
+    note: 農業補助金・食料自給率政策は比較優位に反する。
+
+  # === インフラ ===
+  - match: {ministry: 国土交通省, keyword: 河川整備}
+    friedman: [9]
+    retain: 0.8
+    measure: 維持（縮小）
+    note: ⑨洪水防止の外部効果。
+
+  - match: {ministry: 国土交通省, keyword: 海上保安}
+    friedman: [1]
+    retain: 1.0
+    measure: 維持
+    note: ①海上治安・国境警備。
+
+  - match: {ministry: 国土交通省, keyword: 気象}
+    friedman: [9]
+    retain: 0.8
+    measure: 維持（縮小）
+    note: ⑨気象観測・予報は公共財。
+
+  - match: {ministry: 国土交通省, keyword: ""}
+    friedman: [8, 9]
+    retain: 0.3
+    measure: 大幅縮小
+    note: ⑧⑨インフラ規制・防災のみ。補助金・地域優遇は廃止。
+
+  # === 環境 ===
+  - match: {ministry: 環境省, keyword: 原子力規制}
+    friedman: [9]
+    retain: 1.0
+    measure: 維持
+    note: ⑨原子力安全規制は民間に任せられない外部効果。
+
+  - match: {ministry: 環境省, keyword: ""}
+    friedman: [9]
+    retain: 0.5
+    measure: 縮小
+    note: ⑨環境規制・基準設定は正当。啓発・補助事業は廃止。
