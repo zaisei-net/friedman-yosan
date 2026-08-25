@@ -10,3 +10,6 @@ data/*.xls
 # 独自作成データは管理対象
 !data/yen_grid_daily.xlsx
 !data/working_v10.xlsx
+# FX分析ファイル（独自作成）
+!data/fx/yen_grid.xlsx
+!data/fx/basis_manual_template.xlsx
