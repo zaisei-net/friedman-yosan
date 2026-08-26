@@ -1613,7 +1613,7 @@ KOU_FUNC = [
 
     # ── 皇室費 ────────────────────────────────────────────────────────
     ("皇室費", "宮廷費", ["一部③"], "天皇の国事行為執行に係る公式費用（憲法上の法律公布・外国使節接受等の義務的行為③を遂行するための費用）"),
-    ("皇室費", "内廷費", ["該当なし"], "天皇・皇族の私的生活費（国事行為でなく宮内の日常生活維持費：市場の失敗への対応を実証できない）"),
+    ("皇室費", "内廷費", ["該当なし"], "天皇・皇族の私的生活費（日常維持費。国事行為でなく宮内生活費が主体：市場の失敗への対応を実証できない）"),
     ("皇室費", "皇族費", ["該当なし"], "皇族の品位保持費（憲法上の制度維持の側面はあるが私的生活補助であり市場の失敗への直接対応ではない）"),
     ("皇室費", "",       ["一部③"], "皇室費（天皇・皇族の活動に係る費用：国事行為③に関連する宮廷費は一部正当化されるが私的部分は除く）"),
 ]
@@ -1815,6 +1815,49 @@ for row in ws.iter_rows(min_row=2, values_only=True):
             "残す額_億円": round(oku * rate),
             "理由":       reason,
         })
+
+# ── 人件費按分後処理 ──────────────────────────────────────────────────
+# 人件費の残す額を、同じ（所管・項名）の非人件費項目の加重平均残存率で上書きする。
+# スコープに非人件費が存在しない場合は所管レベルにフォールバック。
+JINJI_KW = (
+    "職員基本給", "職員諸手当", "退職手当", "超過勤務手当",
+    "国家公務員共済組合負担金", "共済組合負担金", "児童手当",
+    "短時間勤務職員給与", "非常勤職員手当", "自衛官給与",
+    # 皇室費の定額支出（人件費相当の私的生活維持費として按分対象）
+    "内廷費", "皇族費",
+)
+
+def is_jinji(moku):
+    return any(kw in moku for kw in JINJI_KW)
+
+# スコープ別（所管・項名）の非人件費 元額・残す額 集計
+scope_gen  = defaultdict(int)
+scope_keep = defaultdict(int)
+kan_gen    = defaultdict(int)
+kan_keep   = defaultdict(int)
+for r in rows_out:
+    if not is_jinji(r["目名"]):
+        key = (r["所管"], r["項名"])
+        scope_gen[key]  += r["元額_億円"]
+        scope_keep[key] += r["残す額_億円"]
+        kan_gen[r["所管"]]  += r["元額_億円"]
+        kan_keep[r["所管"]] += r["残す額_億円"]
+
+for r in rows_out:
+    if is_jinji(r["目名"]):
+        key = (r["所管"], r["項名"])
+        if scope_gen[key] > 0:
+            rate = scope_keep[key] / scope_gen[key]
+            scope_label = "同項"
+        elif kan_gen[r["所管"]] > 0:
+            rate = kan_keep[r["所管"]] / kan_gen[r["所管"]]
+            scope_label = "同省庁"
+        else:
+            continue  # 按分不能な場合は変更しない
+        new_keep = round(r["元額_億円"] * rate)
+        r["残す額_億円"] = new_keep
+        r["残存率"] = f"{rate:.0%}"
+        r["理由"] = r["理由"] + f"（人件費按分：{scope_label}非人件費残存率{rate*100:.0f}%）"
 
 out_path = r"C:\Users\s1\projects\friedman-yosan\output\classify_ippan_r8.csv"
 with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
