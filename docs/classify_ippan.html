@@ -165,13 +165,13 @@ a{color:inherit;text-decoration:none}
 .bar-kan:hover{color:var(--blue)}
 .bar-track{
   flex:1;display:flex;height:18px;border-radius:3px;
-  overflow:hidden;min-width:240px;cursor:pointer;
+  overflow:hidden;min-width:0;cursor:pointer;
 }
 .bar-seg{height:100%;transition:opacity .12s}
 .bar-seg:hover{opacity:.75}
 .bar-total{
-  font-size:.65rem;color:var(--text-3);width:72px;flex-shrink:0;
-  font-variant-numeric:tabular-nums;
+  font-size:.65rem;color:var(--text-3);width:60px;flex-shrink:0;
+  font-variant-numeric:tabular-nums;text-align:right;
 }
 
 /* ── Legend ── */
@@ -182,7 +182,7 @@ a{color:inherit;text-decoration:none}
 }
 .legend-inner{max-width:960px;margin:0 auto}
 .legend-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));
   gap:.3rem;margin-top:.5rem;
 }
 .leg-item{
@@ -201,13 +201,13 @@ a{color:inherit;text-decoration:none}
 .filters select,.filters input[type=text]{
   background:var(--bg);border:1px solid var(--border);border-radius:5px;
   color:var(--text);padding:.32rem .65rem;font-size:.75rem;
-  font-family:inherit;transition:border-color .1s;
+  font-family:inherit;transition:border-color .1s;max-width:100%;
 }
 .filters select:focus,.filters input:focus{outline:none;border-color:var(--blue)}
 .cnt-lbl{font-size:.75rem;color:var(--text-3);margin-left:.2rem}
 .tbl-wrap{
   border:1px solid var(--border);border-radius:8px;overflow:hidden;overflow-x:auto;
-  background:var(--bg);
+  background:var(--bg);-webkit-overflow-scrolling:touch;
 }
 table{width:100%;border-collapse:collapse;font-size:.77rem}
 thead th{
@@ -226,10 +226,12 @@ tbody tr:last-child td{border-bottom:none}
   padding:.12rem .45rem;border-radius:4px;font-size:.67rem;font-weight:700;
   white-space:nowrap;margin-right:2px;
 }
-.td-reason{font-size:.68rem;color:var(--text-2);min-width:200px;line-height:1.55}
+.td-reason{font-size:.68rem;color:var(--text-2);min-width:180px;line-height:1.55}
+/* モバイルで理由列・項名列を非表示 */
+.col-ko,.col-reason{display:table-cell}
 
 /* ── Pager ── */
-.pager{display:flex;align-items:center;gap:.5rem;margin-top:.8rem;font-size:.75rem;color:var(--text-3)}
+.pager{display:flex;align-items:center;gap:.5rem;margin-top:.8rem;font-size:.75rem;color:var(--text-3);flex-wrap:wrap}
 .pager button{
   background:var(--bg);border:1px solid var(--border);border-radius:5px;
   color:var(--text-2);padding:.26rem .65rem;cursor:pointer;font-size:.75rem;
@@ -253,12 +255,30 @@ tbody tr:last-child td{border-bottom:none}
   font-size:.72rem;color:var(--text-3);text-align:center;
 }
 
-@media(max-width:640px){
-  .topbar{padding:.5rem 1rem}
+/* ── Responsive ── */
+@media(max-width:768px){
+  .topbar{padding:.5rem 1rem;gap:1rem}
   .hero{padding:3rem 1rem 2.5rem}
   .outer{padding:0 1rem}
-  .kpi-strip{grid-template-columns:1fr}
+  .kpi-strip{grid-template-columns:1fr;max-width:100%}
+  .bars-section{padding:2.5rem 0}
+  .bars-card{padding:1rem}
+  .bar-kan{width:70px;font-size:.68rem}
+  .bar-total{width:52px;font-size:.62rem}
   .legend-section{padding:2rem 1rem}
+  .legend-grid{grid-template-columns:1fr}
+  .table-section{padding:2rem 0 3rem}
+  .filters input[type=text]{width:100%}
+}
+@media(max-width:480px){
+  .topbar-logo{font-size:.72rem;letter-spacing:.1em}
+  .hero h1{font-size:1.5rem}
+  .hero-sub{font-size:.82rem}
+  .bar-kan{width:60px;font-size:.65rem}
+  .bar-total{display:none}
+  /* 狭い画面では項名・理由を非表示 */
+  .col-ko,.col-reason{display:none}
+  thead th.col-ko,thead th.col-reason{display:none}
 }
 </style>
 </head>
@@ -323,11 +343,11 @@ tbody tr:last-child td{border-bottom:none}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>所管</th><th>項名</th><th>目名</th>
+            <th>所管</th><th class="col-ko">項名</th><th>目名</th>
             <th style="text-align:right">元額(億円)</th>
             <th>分類</th>
             <th style="text-align:right">残す額(億円)</th>
-            <th>判定理由</th>
+            <th class="col-reason">判定理由</th>
           </tr></thead>
           <tbody id="tbody"></tbody>
         </table>
@@ -452,12 +472,12 @@ function render(){
         +' '+c+'</span>';
     }).join('');
     tr.innerHTML='<td style="color:var(--text-2);white-space:nowrap">'+r.k+'</td>'
-      +'<td style="color:var(--text-3);font-size:.7rem">'+r.ko+'</td>'
+      +'<td class="col-ko" style="color:var(--text-3);font-size:.7rem">'+r.ko+'</td>'
       +'<td>'+r.m+'</td>'
       +'<td class="mono">'+Math.round(r.a).toLocaleString()+'</td>'
       +'<td style="white-space:nowrap">'+chips+'</td>'
       +'<td class="mono">'+Math.round(r.s).toLocaleString()+'</td>'
-      +'<td class="td-reason">'+r.r+'</td>';
+      +'<td class="td-reason col-reason">'+r.r+'</td>';
     tbody.appendChild(tr);
   });
   document.getElementById('pInfo').textContent=(start+1)+'–'+end;
