@@ -1835,12 +1835,11 @@ def is_ichibu(cls_str):
 
 def is_anbu_target(row):
     """按分対象か判定する。
-    - 人件費: 分類に正の区分（該当なし以外）がある場合のみ（該当なし人件費は対象外）
+    - 人件費: 分類によらず常に按分対象（該当なし人件費も含む）
     - 非人件費: 分類が一部○○ の場合
     """
-    cls_parts = row["分類"].split("/")
     if is_jinji(row["目名"]):
-        return any(c != "該当なし" for c in cls_parts)
+        return True
     return is_ichibu(row["分類"])
 
 def to_ichibu(cls_str):
@@ -1867,6 +1866,15 @@ for r in rows_out:
         kan_gen[r["所管"]]  += r["元額_億円"]
         kan_keep[r["所管"]] += r["残す額_億円"]
 
+# 人件費の省庁フォールバックが 0 の場合の追加フォールバック:
+# 同省庁の一部X（非人件費）を 50% レートで基準とする
+iku_gen  = defaultdict(float)
+iku_keep = defaultdict(float)
+for r in rows_out:
+    if is_ichibu(r["分類"]) and not is_jinji(r["目名"]):
+        iku_gen[r["所管"]]  += r["元額_億円"]
+        iku_keep[r["所管"]] += r["元額_億円"] * 0.5
+
 for r in rows_out:
     if not is_anbu_target(r):
         continue
@@ -1879,6 +1887,10 @@ for r in rows_out:
         # 人件費のみ省庁レベルにフォールバック（所管全体で按分）
         rate = kan_keep[r["所管"]] / kan_gen[r["所管"]]
         scope_label = "同省庁"
+    elif is_j and iku_gen[r["所管"]] > 0:
+        # 省庁内に非按分費がなく一部X費目のみの場合（皇室費など）: 一部X基準50%で按分
+        rate = iku_keep[r["所管"]] / iku_gen[r["所管"]]
+        scope_label = "同省庁一部X"
     elif not is_j:
         # 一部X は項名スコープなしなら想定50%を維持（フォールバックしない）
         continue
@@ -1887,7 +1899,18 @@ for r in rows_out:
     new_keep = round(r["元額_億円"] * rate)
     r["残す額_億円"] = new_keep
     r["残存率"] = f"{rate:.0%}"
-    r["分類"] = to_ichibu(r["分類"])
+    # 该当なし人件費が按分対象になった場合、分類を一部○○に更新
+    if is_j and r["分類"] == "該当なし":
+        # 同省庁の一部X費目の代表分類を継承（該当なしのまま残さない）
+        ichibu_items = [x for x in rows_out
+                        if x["所管"] == r["所管"] and is_ichibu(x["分類"]) and not is_jinji(x["目名"])]
+        if ichibu_items:
+            rep = ichibu_items[0]["分類"].split("/")[0]
+            r["分類"] = rep  # 例: 一部③
+        else:
+            r["分類"] = to_ichibu(r["分類"])
+    else:
+        r["分類"] = to_ichibu(r["分類"])
     kind = "人件費" if is_j else "一部"
     r["理由"] = r["理由"] + f"（{kind}按分：{scope_label}非按分費残存率{rate*100:.0f}%）"
 
