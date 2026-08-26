@@ -1816,27 +1816,51 @@ for row in ws.iter_rows(min_row=2, values_only=True):
             "理由":       reason,
         })
 
-# ── 人件費按分後処理 ──────────────────────────────────────────────────
-# 人件費の残す額を、同じ（所管・項名）の非人件費項目の加重平均残存率で上書きする。
-# スコープに非人件費が存在しない場合は所管レベルにフォールバック。
+# ── 按分後処理 ────────────────────────────────────────────────────────
+# 按分対象 = 人件費 または 一部○○ 分類の経費
+# 按分率 = 同（所管・項名）の非按分経費の加重平均残存率（フォールバック: 同省庁）
+# 按分後: 分類を「一部○○」に更新、残す額・残存率を上書き
 JINJI_KW = (
     "職員基本給", "職員諸手当", "退職手当", "超過勤務手当",
     "国家公務員共済組合負担金", "共済組合負担金", "児童手当",
     "短時間勤務職員給与", "非常勤職員手当", "自衛官給与",
-    # 皇室費の定額支出（人件費相当の私的生活維持費として按分対象）
     "内廷費", "皇族費",
 )
 
 def is_jinji(moku):
     return any(kw in moku for kw in JINJI_KW)
 
-# スコープ別（所管・項名）の非人件費 元額・残す額 集計
+def is_ichibu(cls_str):
+    return any(c.startswith("一部") for c in cls_str.split("/"))
+
+def is_anbu_target(row):
+    """按分対象か判定する。
+    - 人件費: 分類に正の区分（該当なし以外）がある場合のみ（該当なし人件費は対象外）
+    - 非人件費: 分類が一部○○ の場合
+    """
+    cls_parts = row["分類"].split("/")
+    if is_jinji(row["目名"]):
+        return any(c != "該当なし" for c in cls_parts)
+    return is_ichibu(row["分類"])
+
+def to_ichibu(cls_str):
+    """分類の純粋な ○○ を 一部○○ に変換（該当なし・一部○○ はそのまま）"""
+    parts = cls_str.split("/")
+    result = []
+    for c in parts:
+        if c == "該当なし" or c.startswith("一部"):
+            result.append(c)
+        else:
+            result.append("一部" + c)
+    return "/".join(result)
+
+# スコープ別（所管・項名 → 省庁）の非按分経費の 元額・残す額 集計
 scope_gen  = defaultdict(int)
 scope_keep = defaultdict(int)
 kan_gen    = defaultdict(int)
 kan_keep   = defaultdict(int)
 for r in rows_out:
-    if not is_jinji(r["目名"]):
+    if not is_anbu_target(r):
         key = (r["所管"], r["項名"])
         scope_gen[key]  += r["元額_億円"]
         scope_keep[key] += r["残す額_億円"]
@@ -1844,20 +1868,28 @@ for r in rows_out:
         kan_keep[r["所管"]] += r["残す額_億円"]
 
 for r in rows_out:
-    if is_jinji(r["目名"]):
-        key = (r["所管"], r["項名"])
-        if scope_gen[key] > 0:
-            rate = scope_keep[key] / scope_gen[key]
-            scope_label = "同項"
-        elif kan_gen[r["所管"]] > 0:
-            rate = kan_keep[r["所管"]] / kan_gen[r["所管"]]
-            scope_label = "同省庁"
-        else:
-            continue  # 按分不能な場合は変更しない
-        new_keep = round(r["元額_億円"] * rate)
-        r["残す額_億円"] = new_keep
-        r["残存率"] = f"{rate:.0%}"
-        r["理由"] = r["理由"] + f"（人件費按分：{scope_label}非人件費残存率{rate*100:.0f}%）"
+    if not is_anbu_target(r):
+        continue
+    key = (r["所管"], r["項名"])
+    is_j = is_jinji(r["目名"])
+    if scope_gen[key] > 0:
+        rate = scope_keep[key] / scope_gen[key]
+        scope_label = "同項"
+    elif is_j and kan_gen[r["所管"]] > 0:
+        # 人件費のみ省庁レベルにフォールバック（所管全体で按分）
+        rate = kan_keep[r["所管"]] / kan_gen[r["所管"]]
+        scope_label = "同省庁"
+    elif not is_j:
+        # 一部X は項名スコープなしなら想定50%を維持（フォールバックしない）
+        continue
+    else:
+        continue
+    new_keep = round(r["元額_億円"] * rate)
+    r["残す額_億円"] = new_keep
+    r["残存率"] = f"{rate:.0%}"
+    r["分類"] = to_ichibu(r["分類"])
+    kind = "人件費" if is_j else "一部"
+    r["理由"] = r["理由"] + f"（{kind}按分：{scope_label}非按分費残存率{rate*100:.0f}%）"
 
 out_path = r"C:\Users\s1\projects\friedman-yosan\output\classify_ippan_r8.csv"
 with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
