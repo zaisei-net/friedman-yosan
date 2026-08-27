@@ -242,7 +242,7 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
         <div style="display:flex;flex-direction:column;gap:.2rem">
           <label class="check-label"><input type="checkbox" id="q2a" onchange="onQ2Change()"> A 公共財（非排除性・非競合性）</label>
           <label class="check-label"><input type="checkbox" id="q2b" onchange="onQ2Change()"> B 技術的独占（自然独占・インフラ）</label>
-          <label class="check-label"><input type="checkbox" id="q2c" onchange="onQ2Change()"> C 外部性（正・負の外部効果）<span style="font-size:.7rem;color:var(--text-3);margin-left:.4em">※フリードマン著『資本主義と自由』では「近隣効果」と表記</span></label>
+          <label class="check-label"><input type="checkbox" id="q2c" onchange="onQ2Change()"> C 外部性（正・負の外部効果）<span style="font-size:.7rem;color:var(--text-3);margin-left:.4em">※ミルトン・フリードマン著『資本主義と自由』では「近隣効果」と表記</span></label>
           <label class="check-label"><input type="checkbox" id="q2d" onchange="onQ2Change()"> D 温情主義（責任能力なき者の保護）</label>
         </div>
       </div>
@@ -261,7 +261,7 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
 
       <!-- Q3-C -->
       <div class="section" id="q3c-section" hidden>
-        <h2><span class="step">3C</span>Q3-C: 外部性<span style="font-size:.68rem;font-weight:400;color:var(--text-3);margin-left:.4em">（フリードマン用語：近隣効果）</span></h2>
+        <h2><span class="step">3C</span>Q3-C: 外部性<span style="font-size:.68rem;font-weight:400;color:var(--text-3);margin-left:.4em">（同著では「近隣効果」）</span></h2>
         <div id="funcs-c"></div>
       </div>
 
@@ -328,7 +328,7 @@ const FUNCS_A = [
   ['⑦','貨幣制度の整備'],
 ];
 const FUNCS_B = [['⑧','技術的独占への対抗（自然独占への介入）']];
-const FUNCS_C = [['⑨','外部性の克服（近隣効果：フリードマン用語）']];
+const FUNCS_C = [['⑨','外部性の克服（同著では「近隣効果」）']];
 const FUNCS_D = [['⑩','責任能力なき者の保護（温情主義的介入）']];
 
 function loadStore(){try{store=JSON.parse(localStorage.getItem(STORE_KEY)||'{}');}catch(e){store={};}}
