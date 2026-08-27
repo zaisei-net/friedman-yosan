@@ -380,7 +380,8 @@ tbody tr:last-child td{border-bottom:none}
           <thead><tr>
             <th>所管</th><th class="col-ko">項名</th><th>目名</th>
             <th style="text-align:right">元額(億円)</th>
-            <th>分類・判定</th>
+            <th>分類</th>
+            <th>判定</th>
             <th style="text-align:right">残す額(億円)</th>
             <th class="col-reason">判定理由</th>
           </tr></thead>
@@ -516,7 +517,8 @@ function render(){
       +'<td class="col-ko" style="color:var(--text-3);font-size:.7rem">'+r.ko+'</td>'
       +'<td class="col-m">'+r.m+'</td>'
       +'<td class="mono">'+Math.round(r.a).toLocaleString()+'</td>'
-      +'<td><span class="verdict-badge '+vcls+'" style="display:block;margin-bottom:3px">'+r.v+'</span>'+chips+'</td>'
+      +'<td style="white-space:nowrap">'+chips+'</td>'
+      +'<td><span class="verdict-badge '+vcls+'">'+r.v+'</span></td>'
       +'<td class="mono">'+Math.round(r.s).toLocaleString()+'</td>'
       +'<td class="td-reason col-reason">'+reason+'</td>';
     tbody.appendChild(tr);
