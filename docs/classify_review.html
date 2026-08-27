@@ -294,7 +294,11 @@ const STORE_KEY = 'classify_review_v2';
 let store = {};
 
 // 人件費自動検出パターン
-const JINKENHI_PATTERNS = ['給与','共済費','退職手当','諸手当','職員費','人件費'];
+const JINKENHI_PATTERNS = [
+  '給与','基本給','超過勤務手当','非常勤職員手当',
+  '共済費','共済組合負担金','退職手当','諸手当',
+  '職員費','人件費','公務災害補償費','赴任旅費','移転費'
+];
 function isAutoJin(it){return JINKENHI_PATTERNS.some(p=>it.m.includes(p));}
 function matchedJinKeyword(it){return JINKENHI_PATTERNS.find(p=>it.m.includes(p))||'人件費';}
 
