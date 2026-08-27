@@ -235,6 +235,8 @@ tbody tr:last-child td{border-bottom:none}
 .v-ng{background:var(--red-light);color:var(--red);border:1px solid var(--red)}
 :root[data-theme="dark"] .v-cd{background:#2a1e00;color:#fcd34d;border-color:#b45309}
 .td-reason{font-size:.68rem;color:var(--text-2);min-width:180px;line-height:1.55}
+.col-ko{min-width:13em;max-width:22em}
+.col-m{min-width:15em;max-width:26em}
 /* モバイルで理由列・項名列を非表示 */
 .col-ko,.col-reason{display:table-cell}
 
@@ -488,7 +490,7 @@ function render(){
     const vcls=r.v==='✅正当化可'?'v-ok':r.v==='⚠️条件付き'?'v-cd':'v-ng';
     tr.innerHTML='<td style="color:var(--text-2);white-space:nowrap">'+r.k+'</td>'
       +'<td class="col-ko" style="color:var(--text-3);font-size:.7rem">'+r.ko+'</td>'
-      +'<td>'+r.m+'</td>'
+      +'<td class="col-m">'+r.m+'</td>'
       +'<td class="mono">'+Math.round(r.a).toLocaleString()+'</td>'
       +'<td style="white-space:nowrap">'+chips+'</td>'
       +'<td><span class="verdict-badge '+vcls+'">'+r.v+'</span></td>'
