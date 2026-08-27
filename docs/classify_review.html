@@ -348,9 +348,14 @@ function initAutoClassify(){
 const JINKENHI_PATTERNS = [
   '給与','基本給','超過勤務手当','非常勤職員手当',
   '共済費','共済組合負担金','退職手当','諸手当',
-  '職員費','人件費','公務災害補償費','赴任旅費','移転費'
+  '職員費','人件費','公務災害補償費','赴任旅費','移転費','児童手当'
 ];
-function isAutoJin(it){return JINKENHI_PATTERNS.some(p=>it.m.includes(p));}
+// 人件費パターンに一致しても除外するキーワード（繰入・社会保障給付等）
+const JINKENHI_EXCLUDE = ['繰入'];
+function isAutoJin(it){
+  if(JINKENHI_EXCLUDE.some(p=>it.m.includes(p)))return false;
+  return JINKENHI_PATTERNS.some(p=>it.m.includes(p));
+}
 function matchedJinKeyword(it){return JINKENHI_PATTERNS.find(p=>it.m.includes(p))||'人件費';}
 
 // ① full name map
@@ -470,8 +475,35 @@ function startFromFirst(){
   showClassify(idx);
 }
 
+// 特定制度に連動する人件費項目の定義
+// { 目名キーワード: { label, linkedKeywords(AND条件で連動元を特定) } }
+const JIN_LINKED = {
+  '児童手当': {
+    label: '児童手当制度',
+    linkedKeywords: ['児童手当', '繰入']
+  }
+};
+
+// 連動元の分類比率を返す（連動なし→null, 連動先未分類→{ratio:null,pending:true}）
+function jinLinkedRatio(it){
+  for(const[kw,def] of Object.entries(JIN_LINKED)){
+    if(it.m.includes(kw)){
+      const linked=ITEMS.find(x=>def.linkedKeywords.every(lk=>x.m.includes(lk)));
+      if(!linked)return{ratio:null,label:def.label,pending:true,linkedName:'(連動元不明)'};
+      const r=getRec(linked);
+      if(r&&r.status==='classified'&&r.ratio!=null){
+        return{ratio:r.ratio,label:def.label,pending:false,linkedName:linked.m};
+      }
+      return{ratio:null,label:def.label,pending:true,linkedName:linked.m};
+    }
+  }
+  return null;
+}
+
 // ── 人件費按分 ──
 function jinRatio(it){
+  const linked=jinLinkedRatio(it);
+  if(linked!==null)return linked.ratio;
   const cl=ITEMS.filter(x=>x.k===it.k&&getRec(x)&&getRec(x).status==='classified');
   if(!cl.length)return null;
   const tA=cl.reduce((s,x)=>s+x.a,0),tS=cl.reduce((s,x)=>s+getRec(x).sAmt,0);
@@ -531,15 +563,27 @@ function renderClassify(){
 }
 
 function renderJin(it,autoDetected){
-  const r=jinRatio(it);
+  const ratio=jinRatio(it);
+  const linked=jinLinkedRatio(it);
   const box=document.getElementById('jin-result-box');
   let html='';
   if(autoDetected){
     html+='<div style="font-weight:700;margin-bottom:.35rem">🤖 自動検出: 目名に「'+matchedJinKeyword(it)+'」が含まれるため人件費と判定しました</div>';
   }
-  html+=(r===null
-    ?'省庁の他の歳出が未分類のため按分比率未確定'
-    :'現時点の按分比率: '+r.toFixed(1)+'%（残す額: '+Math.round(it.a*r/100).toLocaleString()+'億円）');
+  if(linked!==null){
+    // 制度連動
+    if(linked.pending){
+      html+='<b>🔗 '+linked.label+'に連動</b>（連動元「'+linked.linkedName+'」が未分類のため比率未確定）';
+    } else {
+      html+='<b>🔗 '+linked.label+'に連動</b>: '+linked.ratio.toFixed(1)+'%'
+        +'（残す額: '+Math.round(it.a*linked.ratio/100).toLocaleString()+'億円）'
+        +'<div style="font-size:.72rem;opacity:.7;margin-top:.2rem">連動元: '+linked.linkedName+'</div>';
+    }
+  } else {
+    html+=(ratio===null
+      ?'省庁の他の歳出が未分類のため按分比率未確定'
+      :'現時点の省庁按分比率: '+ratio.toFixed(1)+'%（残す額: '+Math.round(it.a*ratio/100).toLocaleString()+'億円）');
+  }
   box.innerHTML=html;
   const rec=getRec(it);
   document.getElementById('jin-note').value=rec&&rec.note?rec.note:'';
