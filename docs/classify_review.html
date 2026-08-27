@@ -98,29 +98,34 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
 .btn-row button.sel-ng{border-color:var(--red);background:var(--red-lt);color:var(--red);font-weight:700}
 .btn-row button.sel-cd{border-color:var(--amber);background:var(--amber-lt);color:var(--amber);font-weight:700}
 
-/* Function chips (Q3) */
-.chip-group{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.4rem}
-.fchip{
+/* Function rows (Q3) — vertical list */
+.frow{
+  display:flex;align-items:flex-start;gap:.55rem;
+  padding:.4rem .5rem;border-radius:var(--radius);cursor:pointer;
+  margin-bottom:.15rem;border:1px solid transparent;
+  transition:background .1s;user-select:none;
+}
+.frow:hover{background:var(--border);border-color:var(--border)}
+.frow.is-full{background:var(--accent-lt);border-color:var(--accent)}
+.frow.is-partial{background:var(--amber-lt);border-color:var(--amber)}
+.fnum{
+  flex-shrink:0;width:1.9em;height:1.9em;border-radius:50%;
   display:inline-flex;align-items:center;justify-content:center;
-  width:2.1em;height:2.1em;border-radius:50%;font-size:.95rem;font-weight:700;
-  border:2px solid var(--border);background:var(--bg);cursor:pointer;
-  position:relative;user-select:none;transition:all .12s;
+  font-weight:700;font-size:.85rem;
+  border:2px solid var(--border);background:var(--bg);color:var(--text);
+  margin-top:.05em;
 }
-.fchip:hover{border-color:var(--accent)}
-.fchip.full{border-color:var(--accent);background:var(--accent);color:#fff}
-.fchip.partial{border-color:var(--amber);background:var(--amber-lt);color:var(--amber)}
-.fchip .tip{
-  display:none;position:absolute;bottom:115%;left:50%;transform:translateX(-50%);
-  background:var(--text);color:var(--bg);font-size:.68rem;white-space:nowrap;
-  padding:.25em .5em;border-radius:4px;pointer-events:none;z-index:10;
-}
-.fchip:hover .tip{display:block}
-
-/* Partial pct inputs */
-.partial-inputs{margin-top:.35rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;
-  font-size:.78rem;color:var(--text-2)}
-.partial-inputs label{display:flex;align-items:center;gap:.25rem}
-.partial-inputs input{width:54px;text-align:right}
+.frow.is-full .fnum{border-color:var(--accent);background:var(--accent);color:#fff}
+.frow.is-partial .fnum{border-color:var(--amber);background:var(--amber-lt);color:var(--amber)}
+.fname{flex:1;font-size:.82rem;line-height:1.45;padding-top:.05em}
+.fstate{flex-shrink:0;font-size:.68rem;font-weight:700;padding:.1em .45em;
+  border-radius:3px;white-space:nowrap;align-self:center;
+  color:var(--text-3);background:var(--border)}
+.frow.is-full .fstate{color:var(--accent);background:var(--accent-lt)}
+.frow.is-partial .fstate{color:var(--amber);background:var(--amber-lt)}
+.fpct{display:none;align-items:center;gap:.25rem;margin-top:.2rem;font-size:.75rem}
+.frow.is-partial .fpct{display:flex}
+.fpct input{width:52px;text-align:right;font-size:.82rem}
 
 /* Ratio / verdict */
 .ratio-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.3rem 0}
@@ -245,8 +250,7 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
     <div class="qblock" id="q3-block" hidden>
       <div class="qlabel">Q3</div>
       <div class="qtext">該当するフリードマン機能を選んでください。<small style="color:var(--text-3)">（1回=完全、2回=一部、3回=解除）</small></div>
-      <div class="chip-group" id="chip-group"></div>
-      <div class="partial-inputs" id="partial-inputs"></div>
+      <div id="func-list"></div>
     </div>
 
     <!-- Q4 -->
@@ -478,29 +482,31 @@ function toggleQ2(k){
 }
 
 function rebuildChips(){
-  const visible=new Set();
-  q2Sel.forEach(k=>Q2_FUNCS[k].forEach(n=>visible.add(n)));
-  // Remove chips not in visible
-  Object.keys(funcState).forEach(n=>{if(!visible.has(n))delete funcState[n];});
-  const cg=document.getElementById('chip-group');cg.innerHTML='';
+  const visible=[];
+  ['A','B','C','D'].forEach(k=>{if(q2Sel.has(k))Q2_FUNCS[k].forEach(n=>visible.push(n));});
+  Object.keys(funcState).forEach(n=>{if(!visible.includes(n))delete funcState[n];});
+  const fl=document.getElementById('func-list');fl.innerHTML='';
   visible.forEach(n=>{
     const s=funcState[n]||0;
-    const chip=document.createElement('span');
-    chip.className='fchip'+(s===1?' full':s===2?' partial':'');
-    chip.innerHTML=n+'<span class="tip">'+FNAMES[n]+'</span>';
-    chip.onclick=()=>{funcState[n]=((funcState[n]||0)+1)%3;rebuildChips();updatePartialInputs();autoRatio();onRatio();};
-    cg.appendChild(chip);
+    const pctVal=document.getElementById('pp_'+n)?document.getElementById('pp_'+n).value:'';
+    const row=document.createElement('div');
+    row.className='frow'+(s===1?' is-full':s===2?' is-partial':'');
+    row.innerHTML=
+      '<span class="fnum">'+n+'</span>'
+      +'<span class="fname">'+FNAMES[n]+'</span>'
+      +'<span class="fstate">'+(s===0?'—':s===1?'完全':'一部')+'</span>';
+    // 一部の%input
+    const pDiv=document.createElement('div');
+    pDiv.style.cssText='display:'+(s===2?'flex':'none')+';align-items:center;gap:.25rem;margin-top:.15rem;font-size:.75rem;flex-wrap:nowrap';
+    pDiv.innerHTML='正当化率 <input type="number" id="pp_'+n+'" min="1" max="99" step="1" value="'+pctVal+'" placeholder="%" oninput="onRatio()" style="width:52px;text-align:right"> %';
+    row.appendChild(pDiv);
+    row.onclick=(e)=>{
+      if(e.target.tagName==='INPUT')return;
+      funcState[n]=((funcState[n]||0)+1)%3;
+      rebuildChips();autoRatio();onRatio();
+    };
+    fl.appendChild(row);
   });
-  updatePartialInputs();
-}
-function updatePartialInputs(){
-  const partials=Object.entries(funcState).filter(([,s])=>s===2).map(([n])=>n);
-  const pi=document.getElementById('partial-inputs');
-  if(!partials.length){pi.innerHTML='';return;}
-  pi.innerHTML='一部の正当化比率: '+partials.map(n=>{
-    const cur=document.getElementById('pp_'+n)?document.getElementById('pp_'+n).value:'';
-    return '<label>'+n+' <input type="number" id="pp_'+n+'" min="1" max="99" step="1" value="'+cur+'" placeholder="%" oninput="onRatio()" style="width:54px;text-align:right"> %</label>';
-  }).join(' ');
 }
 function autoRatio(){
   const funcs=getSelFuncs();
