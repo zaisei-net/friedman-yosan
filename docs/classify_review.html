@@ -69,6 +69,7 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
 .st-cd{background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber)}
 .st-ng{background:var(--red-lt);color:var(--red);border:1px solid var(--red)}
 .st-jin{background:var(--purple-lt);color:var(--purple);border:1px solid var(--purple)}
+.st-jincand{background:var(--purple-lt);color:var(--purple)}
 .st-skip{background:var(--surface);color:var(--text-3);border:1px solid var(--border)}
 #list-pager{display:flex;gap:.4rem;align-items:center;padding:.5rem 1rem;
   border-top:1px solid var(--border);font-size:.75rem;color:var(--text-3)}
@@ -164,8 +165,9 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
     <select id="fStatus">
       <option value="">状態：全て</option>
       <option value="unclassified">未分類</option>
+      <option value="jinkenhi-candidate">人件費候補（自動検出）</option>
       <option value="classified">分類済</option>
-      <option value="jinkenhi">人件費</option>
+      <option value="jinkenhi">人件費（確認済）</option>
       <option value="skipped">スキップ</option>
     </select>
     <input type="text" id="fTxt" placeholder="科目名で検索…" style="width:180px">
@@ -291,6 +293,11 @@ const KANS  = ["皇室費","国会","裁判所","会計検査院","内閣","内�
 const STORE_KEY = 'classify_review_v2';
 let store = {};
 
+// 人件費自動検出パターン
+const JINKENHI_PATTERNS = ['給与','共済費','退職手当','諸手当','職員費','人件費'];
+function isAutoJin(it){return JINKENHI_PATTERNS.some(p=>it.m.includes(p));}
+function matchedJinKeyword(it){return JINKENHI_PATTERNS.find(p=>it.m.includes(p))||'人件費';}
+
 // ① full name map
 const FNAMES = {
   '①':'法と秩序を維持すること',
@@ -335,7 +342,15 @@ function renderList(){
   lFiltered=ITEMS.filter(it=>{
     if(kan&&it.k!==kan)return false;
     if(txt&&!it.m.toLowerCase().includes(txt)&&!it.ko.toLowerCase().includes(txt))return false;
-    if(st){const r=getRec(it);if((r?r.status:'unclassified')!==st)return false;}
+    if(st){
+      const r=getRec(it);
+      const rstatus=r?r.status:'unclassified';
+      if(st==='jinkenhi-candidate'){
+        if(rstatus!=='unclassified'||!isAutoJin(it))return false;
+      } else {
+        if(rstatus!==st)return false;
+      }
+    }
     return true;
   });
   const s=lPage*L_PER,e=Math.min(s+L_PER,lFiltered.length);
@@ -343,7 +358,10 @@ function renderList(){
   lFiltered.slice(s,e).forEach(it=>{
     const r=getRec(it),st2=r?r.status:'unclassified';
     let sb='',vb='',sa='—';
-    if(st2==='unclassified'){sb='<span class="sbadge st-none">未分類</span>';}
+    if(st2==='unclassified'){
+      if(isAutoJin(it)){sb='<span class="sbadge st-jincand">人件費候補</span>';}
+      else{sb='<span class="sbadge st-none">未分類</span>';}
+    }
     else if(st2==='jinkenhi'){
       sb='<span class="sbadge st-jin">人件費</span>';vb='<span class="sbadge st-cd">⚠️</span>';
       const jr=jinRatio(it);sa=jr!==null?Math.round(it.a*jr/100).toLocaleString():'(按分待)';
@@ -412,11 +430,12 @@ function renderClassify(){
     +'<div class="mname">'+it.m+'</div>'
     +'<div class="amount mono">元額 '+Math.round(it.a).toLocaleString()+' 億円</div>';
 
-  const isJin=r&&r.status==='jinkenhi';
+  const autoJin=!r&&isAutoJin(it);
+  const isJin=(r&&r.status==='jinkenhi')||autoJin;
   document.getElementById('chk-jin').checked=isJin;
   document.getElementById('jin-panel').hidden=!isJin;
   document.getElementById('flow-panel').hidden=isJin;
-  if(isJin){renderJin(it);return;}
+  if(isJin){renderJin(it,autoJin);return;}
 
   // Reset state
   q1Val=null;q2Sel=new Set();funcState={};
@@ -425,8 +444,7 @@ function renderClassify(){
   document.getElementById('q1-block').hidden=false;
   ['q1-yes','q1-no'].forEach(id=>document.getElementById(id).classList.remove('sel','sel-ng','sel-ok'));
   ['A','B','C','D'].forEach(k=>{const b=document.getElementById('q2-'+k);if(b)b.classList.remove('sel');});
-  document.getElementById('chip-group').innerHTML='';
-  document.getElementById('partial-inputs').innerHTML='';
+  document.getElementById('func-list').innerHTML='';
   document.getElementById('ratio-in').value='';
   document.getElementById('note-in').value='';
   document.getElementById('no-note').value='';
@@ -438,12 +456,17 @@ function renderClassify(){
   if(r&&r.status==='classified')restoreFlow(r);
 }
 
-function renderJin(it){
+function renderJin(it,autoDetected){
   const r=jinRatio(it);
   const box=document.getElementById('jin-result-box');
-  box.textContent=r===null
+  let html='';
+  if(autoDetected){
+    html+='<div style="font-weight:700;margin-bottom:.35rem">🤖 自動検出: 目名に「'+matchedJinKeyword(it)+'」が含まれるため人件費と判定しました</div>';
+  }
+  html+=(r===null
     ?'省庁の他の歳出が未分類のため按分比率未確定'
-    :'現時点の按分比率: '+r.toFixed(1)+'%（残す額: '+Math.round(it.a*r/100).toLocaleString()+'億円）';
+    :'現時点の按分比率: '+r.toFixed(1)+'%（残す額: '+Math.round(it.a*r/100).toLocaleString()+'億円）');
+  box.innerHTML=html;
   const rec=getRec(it);
   document.getElementById('jin-note').value=rec&&rec.note?rec.note:'';
 }
@@ -451,7 +474,22 @@ function onJinChange(){
   const on=document.getElementById('chk-jin').checked;
   document.getElementById('jin-panel').hidden=!on;
   document.getElementById('flow-panel').hidden=on;
-  if(on)renderJin(ITEMS[cIdx]);
+  if(on)renderJin(ITEMS[cIdx],false);
+  else{
+    // チェックを外した = 自動検出を却下してフローチャートへ
+    q1Val=null;q2Sel=new Set();funcState={};
+    ['q2-block','q3-block','q4-block','no-block'].forEach(id=>document.getElementById(id).hidden=true);
+    document.getElementById('q1-block').hidden=false;
+    ['q1-yes','q1-no'].forEach(id=>document.getElementById(id).classList.remove('sel','sel-ng','sel-ok'));
+    ['A','B','C','D'].forEach(k=>{const b=document.getElementById('q2-'+k);if(b)b.classList.remove('sel');});
+    document.getElementById('func-list').innerHTML='';
+    document.getElementById('ratio-in').value='';
+    document.getElementById('note-in').value='';
+    document.getElementById('no-note').value='';
+    document.getElementById('verdict-box').innerHTML='';
+    document.getElementById('bunrui-lbl').textContent='';
+    document.getElementById('save-btn').disabled=true;
+  }
 }
 function saveJin(){
   setRec(ITEMS[cIdx],{status:'jinkenhi',note:document.getElementById('jin-note').value,savedAt:new Date().toISOString()});
@@ -602,7 +640,7 @@ function exportCSV(){
   a.download='classify_review_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
-loadStore();showList();updateProgress();
+loadStore();showList();updateProg();
 </script>
 </body>
 </html>
