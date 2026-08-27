@@ -338,6 +338,29 @@ tbody tr:last-child td{border-bottom:none}
     </div>
   </section>
 
+  <section class="legend-section" style="padding:1.2rem 2rem">
+    <div class="legend-inner">
+      <div class="sh" style="margin-bottom:.6rem">
+        <span class="sh-tag">判定凡例</span>
+        <span class="sh-rule"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;font-size:.73rem;color:var(--text-2)">
+        <div style="display:flex;align-items:flex-start;gap:.5rem;min-width:240px;max-width:340px">
+          <span class="verdict-badge v-ok" style="flex-shrink:0;margin-top:.1em">✅ 正当化可</span>
+          <span>市場の失敗が実証され、①〜⑦の政府本来の役割に完全に該当する経費</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:.5rem;min-width:240px;max-width:380px">
+          <span class="verdict-badge v-cd" style="flex-shrink:0;margin-top:.1em">⚠️ 条件付き</span>
+          <span>技術的独占⑧・近隣効果⑨・温情主義⑩、または一部のみ該当。条件変化の確認・随時見直し・継続的検証が必要</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:.5rem;min-width:240px;max-width:340px">
+          <span class="verdict-badge v-ng" style="flex-shrink:0;margin-top:.1em">❌ 正当化不可</span>
+          <span>市場・自発的交換で達成可能。または市場の失敗の根拠を実証できない経費</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="table-section">
     <div class="outer">
       <div class="sh">
@@ -489,6 +512,7 @@ function render(){
         +' '+c+'</span>';
     }).join('');
     const vcls=r.v==='✅正当化可'?'v-ok':r.v==='⚠️条件付き'?'v-cd':'v-ng';
+    const reason=r.r.replace(/ \/ → [✅⚠️❌].*/,'');
     tr.innerHTML='<td style="color:var(--text-2);white-space:nowrap">'+r.k+'</td>'
       +'<td class="col-ko" style="color:var(--text-3);font-size:.7rem">'+r.ko+'</td>'
       +'<td class="col-m">'+r.m+'</td>'
@@ -496,7 +520,7 @@ function render(){
       +'<td style="white-space:nowrap">'+chips+'</td>'
       +'<td><span class="verdict-badge '+vcls+'">'+r.v+'</span></td>'
       +'<td class="mono">'+Math.round(r.s).toLocaleString()+'</td>'
-      +'<td class="td-reason col-reason">'+r.r+'</td>';
+      +'<td class="td-reason col-reason">'+reason+'</td>';
     tbody.appendChild(tr);
   });
   document.getElementById('pInfo').textContent=(start+1)+'–'+end;
