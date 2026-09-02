@@ -332,11 +332,54 @@ function parseBunrui(c, q2str){
 // 完全性係数: 全完全→1.0, いずれか一部→0.4
 // ※温情主義(D)の対象人口比は自動算出不可 — 対象が責任能力者混在の場合は手動補正
 const Q2_BASE={A:50,D:35,B:33,C:18};
-function calcAutoRatio(q2arr,funcs){
+
+// 国庫負担率の実証値 (目名パターン → 補助率, 法令根拠順)
+// adjusted_ratio = min(base_ratio / 補助率, 100)
+// ※補助率不明の場合は1.0扱い(補正なし)
+const HOJO_RATE_MAP=[
+  // 生活保護 (生活保護法75条: 国3/4)
+  ['医療扶助費等負担金',0.75],['生活扶助費等負担金',0.75],
+  ['住宅扶助費等負担金',0.75],['教育扶助費等負担金',0.75],
+  ['介護扶助費等負担金',0.75],['その他扶助費等負担金',0.75],
+  // 難病 (難病法21条: 国1/2)
+  ['難病医療費等負担金',0.50],
+  // 障害者 (障害者総合支援法95条: 国1/2)
+  ['障害者自立支援給付費負担金',0.50],['障害者医療費負担金',0.50],
+  // 後期高齢者医療 (高齢者医療確保法: 公費50%×国4/6 ≈ 1/3)
+  ['後期高齢者医療給付費等負担金',1/3],['後期高齢者医療等財政調整交付金',1/3],
+  // 介護保険 (介護保険法121条: 国1/4)
+  ['介護給付費等負担金',0.25],['介護給付費財政調整交付金',0.25],
+  ['地域支援事業交付金',0.25],
+  // 義務教育 (義務教育費国庫負担法2条: 国1/3)
+  ['義務教育費国庫負担金',1/3],['公立学校施設整備費負担金',1/3],
+  // 国保 (国民健康保険法70条: 国32%)
+  ['国民健康保険療養給付費等負担金',0.32],
+  ['国民健康保険後期高齢者医療費支援金等負担金',0.32],
+  ['国民健康保険後期高齢者医療費支援金等財政調整交付金',0.32],
+  ['国民健康保険介護納付金負担金',0.32],
+  ['国民健康保険財政調整交付金',0.32],
+  ['国民健康保険保険者努力支援交付金',0.32],
+  // 国保組合・協会けんぽ (健康保険法153条: 16.4%)
+  ['国民健康保険組合療養給付費補助金',0.164],
+  ['国民健康保険組合後期高齢者医療費支援金等補助金',0.164],
+  ['全国健康保険協会保険給付費等補助金',0.164],
+  // 私立学校 (私学振興助成法: 実態≈30%)
+  ['私立大学等経常費補助金',0.30],
+  ['私立高等学校等経常費助成費補助金',0.30],
+  ['私立学校施設整備費補助金',0.30],
+];
+function getHojoRate(m){
+  for(const[pat,rate] of HOJO_RATE_MAP){if(m.includes(pat))return rate;}
+  return null; // 不明: 直営扱い(補正なし)
+}
+
+function calcAutoRatio(q2arr,funcs,m=''){
   if(!q2arr||!q2arr.length)return 0;
   const base=Math.max(...q2arr.map(k=>Q2_BASE[k]||0));
   const hasPartial=funcs&&funcs.some(f=>f.s===2);
-  return Math.round(base*(hasPartial?0.4:1.0));
+  const baseRatio=base*(hasPartial?0.4:1.0);
+  const hr=getHojoRate(m);
+  return hr!==null&&hr<1?Math.min(Math.round(baseRatio/hr),100):Math.round(baseRatio);
 }
 
 // 初回ロード時に全件自動判定
@@ -349,7 +392,7 @@ function initAutoClassify(){
     const verdict=it.v||'';
     let ratio,sAmt;
     if(q1==='no'){ratio=0;sAmt=0;}
-    else{ratio=calcAutoRatio(q2,funcs);sAmt=it.a*ratio/100;}
+    else{ratio=calcAutoRatio(q2,funcs,it.m);sAmt=it.a*ratio/100;}
     store[ikey(it)]={status:'classified',q1,q2,funcs,ratio,bunrui:it.c||'該当なし',verdict,sAmt,note:'',savedAt:null,auto:true};
     anyNew=true;
   });
@@ -680,7 +723,8 @@ function autoRatio(){
   const funcs=getSelFuncs();
   if(!funcs.length)return;
   const q2=[...new Set(funcs.map(f=>FUNC_TO_Q2[f.n]).filter(Boolean))];
-  document.getElementById('ratio-in').value=calcAutoRatio(q2,funcs);
+  const m=ITEMS[cIdx]?ITEMS[cIdx].m:'';
+  document.getElementById('ratio-in').value=calcAutoRatio(q2,funcs,m);
 }
 
 function getSelFuncs(){
