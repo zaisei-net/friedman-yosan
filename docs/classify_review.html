@@ -166,6 +166,25 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
   letter-spacing:.05em;text-transform:uppercase}
 .ref-sec p{font-size:.83rem;line-height:1.7;white-space:pre-wrap;color:var(--text-2)}
 .ref-sec mark{background:var(--amber-lt);color:var(--amber)}
+.ref-text{font-size:.84rem;line-height:1.8;color:var(--text-2)}
+.ref-text br{display:block;content:"";margin-top:.15rem}
+.ref-tbl-wrap{overflow-x:auto;margin:.6rem 0}
+.ref-tbl-wrap table{border-collapse:collapse;font-size:.78rem;width:100%;min-width:480px}
+.ref-tbl-wrap th{text-align:left;padding:.3rem .6rem;background:var(--surface);
+  font-weight:700;border:1px solid var(--border);white-space:nowrap;color:var(--text-3);font-size:.7rem}
+.ref-tbl-wrap td{padding:.3rem .6rem;border:1px solid var(--border);vertical-align:top;line-height:1.5}
+.ref-tbl-wrap td:first-child{font-weight:700;white-space:nowrap;color:var(--text)}
+.ref-tbl-wrap td:nth-child(2){white-space:nowrap;color:var(--text-2)}
+.ref-tbl-wrap td:nth-child(3){color:var(--text-2);font-size:.76rem}
+.ref-clause{margin-bottom:.6rem;padding-bottom:.6rem;border-bottom:1px solid var(--border)}
+.ref-clause:last-child{border-bottom:none}
+.ref-law{background:var(--surface);border:1px solid var(--border);border-radius:3px;
+  padding:.05em .35em;font-size:.8em;color:var(--text);font-weight:600}
+.ref-numtbl-wrap{overflow-x:auto;margin:.6rem 0}
+.ref-numtbl-wrap table{border-collapse:collapse;font-size:.78rem;width:100%}
+.ref-numtbl-wrap th{padding:.3rem .6rem;background:var(--surface);font-weight:700;
+  border:1px solid var(--border);color:var(--text-3);font-size:.7rem;text-align:left}
+.ref-numtbl-wrap td{padding:.3rem .6rem;border:1px solid var(--border);vertical-align:top;line-height:1.5}
 </style>
 </head>
 <body>
@@ -881,28 +900,136 @@ function refSearch(q){
   const key = activeTab ? activeTab.getAttribute('onclick').match(/'(.*?)'/)?.[1] : 'all';
   renderRefBody(key || 'all', q);
 }
-function highlight(text, q){
-  if(!q) return text.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// 省庁名リスト（テーブルパース用）
+const REF_MINS = ['国会','裁判所','会計検査院','内閣府','内閣','デジタル庁','防災庁',
+  '総務省','法務省','外務省','財務省','文部科学省','厚生労働省',
+  '農林水産省','経済産業省','国土交通省','環境省','防衛省'];
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function applyQ(s, q){
+  if(!q) return s;
   const esc = q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  return text.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(new RegExp(esc.replace(/</g,'&lt;').replace(/>/g,'&gt;'),'gi'),m=>`<mark>${m}</mark>`);
+  return s.replace(new RegExp(esc,'gi'), m=>`<mark>${m}</mark>`);
 }
+function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="ref-law">「${t}」</span>`); }
+
+// 「所管 組織 項」形式のテーブルをHTMLテーブルに変換
+function parseMinistryTable(text, q) {
+  const tokens = text.trim().split(/\s+/);
+  const minSet = new Set(REF_MINS);
+  const rows = [];
+  let cur = null;
+  let buf = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (minSet.has(t)) {
+      if (cur) { cur.items.push(buf.join(' ')); buf = []; rows.push(cur); }
+      cur = { ministry: t, org: '', items: [] };
+      buf = [];
+    } else if (cur && cur.org === '' && !t.endsWith('費') && !t.endsWith('金') && !t.endsWith('金。') && buf.length === 0) {
+      // 次のトークンが「費」で終わる事項名でなければ組織名
+      // ヒューリスティック: 組織名は短く(30文字以下)「省」「庁」「院」「局」「所」「会」で終わる
+      if (t.length <= 20 && /[省庁院局所館委員会部課]$/.test(t)) {
+        cur.org = t;
+      } else {
+        buf.push(t);
+      }
+    } else if (cur) {
+      buf.push(t);
+    }
+  }
+  if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); }
+
+  if (rows.length === 0) return null;
+
+  let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>組織</th><th>項</th></tr></thead><tbody>';
+  for (const r of rows) {
+    const items = r.items.join(' ').split(/[、,]/).map(s=>s.trim()).filter(Boolean);
+    const itemHtml = items.map(s=>applyQ(escHtml(fmtLaw(s)), q)).join('<br>');
+    tbl += `<tr><td>${applyQ(escHtml(r.ministry),q)}</td><td>${applyQ(escHtml(r.org),q)}</td><td>${itemHtml}</td></tr>`;
+  }
+  tbl += '</tbody></table></div>';
+  return tbl;
+}
+
+// 数値+タブ形式（損失補償・債務保証の表）を2列テーブルに
+function parseNumTable(text, q) {
+  // 「区分 限度額(千円)」または「債務 根拠規定 金額の限度」パターン
+  const lines = text.split(/(?=\d+\s+[^\d])/);
+  if (lines.length < 3) return null;
+  let tbl = '<div class="ref-numtbl-wrap"><table><tbody>';
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const m = line.match(/^(\d+)\s+(.+)/s);
+    if (m) {
+      tbl += `<tr><td style="white-space:nowrap;font-weight:700">${escHtml(m[1])}</td><td>${applyQ(escHtml(fmtLaw(m[2].trim())),q)}</td></tr>`;
+    } else {
+      tbl += `<tr><td colspan="2">${applyQ(escHtml(fmtLaw(line.trim())),q)}</td></tr>`;
+    }
+  }
+  tbl += '</tbody></table></div>';
+  return tbl;
+}
+
+function formatContent(text, q) {
+  // 「所管 組織 項」を含む条文は表形式に
+  const hasMinTable = text.includes('所管 組織 項');
+  let html = '';
+
+  if (hasMinTable) {
+    // 本文部分（「所管 組織 項」前）と表部分に分割
+    const parts = text.split('所管 組織 項');
+    // 最初は条文本文
+    const prose = parts[0].trim();
+    if (prose) {
+      html += `<div class="ref-clause ref-text">${applyQ(escHtml(fmtLaw(prose)).replace(/。/g,'。<br>').replace(/第(\d+)条/g,'<strong>第$1条</strong>').replace(/第(\d+)表/g,'<br><strong>第$1表</strong>'), q)}</div>`;
+    }
+    // 表データ部分（複数の「所管 組織 項」ブロックがある場合）
+    for (let i = 1; i < parts.length; i++) {
+      let tableData = parts[i];
+      // 次の「所管 組織 項」がなければそのままパース
+      // 前後の文章分離（数字で始まる表番号など）
+      const tblHtml = parseMinistryTable(tableData, q);
+      if (tblHtml) {
+        html += tblHtml;
+      } else {
+        html += `<div class="ref-text">${applyQ(escHtml(fmtLaw(tableData)), q)}</div>`;
+      }
+    }
+  } else {
+    // 通常の条文: 句点で改行、法律名を強調
+    const formatted = escHtml(text)
+      .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
+      .replace(/。/g, '。<br>')
+      .replace(/第(\s*\d+\s*)条/g, '<strong>第$1条</strong>')
+      .replace(/第(\s*\d+\s*)表/g, '<br><strong>第$1表</strong>')
+      .replace(/^\s*(\d+)\s+/gm, '<b>$1.</b> ');
+    html = `<div class="ref-clause ref-text">${applyQ(formatted, q)}</div>`;
+  }
+  return html;
+}
+
 function renderRefBody(key, q){
   const body = document.getElementById('ref-body');
   let html = '';
 
   if(key === 'codes'){
     const cs = YOSAN_REF.codes;
-    html += `<div class="ref-sec"><h3>コード体系 (11桁)</h3><p>${cs.description}</p>`;
-    html += `<p style="margin-top:.5rem">例: ${cs.example}</p>`;
+    const ex = applyQ(escHtml(cs.example||''), q);
+    html += `<div class="ref-sec"><h3>コード体系 (11桁)</h3>`;
+    html += `<p class="ref-text">${applyQ(escHtml(cs.description||''),q)}</p>`;
+    if(ex) html += `<p class="ref-text" style="margin-top:.4rem;font-family:monospace">${ex}</p>`;
     html += `<h3 style="margin-top:.8rem">使途別コード</h3>`;
-    for(const [k,v] of Object.entries(cs.shiyo_betsu||{})){
-      html += `<p><strong>${k}</strong>: ${v}</p>`;
-    }
+    html += '<div class="ref-tbl-wrap"><table><thead><tr><th>コード</th><th>名称</th></tr></thead><tbody>';
+    for(const [k,v] of Object.entries(cs.shiyo_betsu||{}))
+      html += `<tr><td>${escHtml(k)}</td><td>${applyQ(escHtml(v),q)}</td></tr>`;
+    html += '</tbody></table></div>';
     html += `<h3 style="margin-top:.8rem">目別コード</h3>`;
-    for(const [k,v] of Object.entries(cs.moku_betsu||{})){
-      html += `<p><strong>${k}</strong>: ${v}</p>`;
-    }
+    html += '<div class="ref-tbl-wrap"><table><thead><tr><th>コード</th><th>名称</th></tr></thead><tbody>';
+    for(const [k,v] of Object.entries(cs.moku_betsu||{}))
+      html += `<tr><td>${escHtml(k)}</td><td>${applyQ(escHtml(v),q)}</td></tr>`;
+    html += '</tbody></table></div>';
     html += '</div>';
   } else {
     const filter = {
@@ -920,8 +1047,8 @@ function renderRefBody(key, q){
       html = '<p style="padding:1rem;color:var(--text-3)">該当なし</p>';
     } else {
       for(const s of secs){
-        html += `<div class="ref-sec"><h3>${highlight(s.title,q)}</h3>`;
-        html += `<p>${highlight(s.content,q)}</p></div>`;
+        const titleHtml = applyQ(escHtml(s.title), q);
+        html += `<div class="ref-sec"><h3>${titleHtml}</h3>${formatContent(s.content, q)}</div>`;
       }
     }
   }
