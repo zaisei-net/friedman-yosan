@@ -164,6 +164,8 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
 .ref-sec{margin-bottom:1.5rem}
 .ref-sec h3{font-size:.82rem;font-weight:800;color:var(--accent);margin-bottom:.4rem;
   letter-spacing:.05em;text-transform:uppercase}
+.ref-placeholder h3{color:var(--text-2);text-transform:none;font-size:.9rem}
+.ref-placeholder .ref-text{color:var(--text-3);font-style:italic}
 .ref-sec p{font-size:.83rem;line-height:1.7;white-space:pre-wrap;color:var(--text-2)}
 .ref-sec mark{background:var(--amber-lt);color:var(--amber)}
 .ref-text{font-size:.84rem;line-height:1.8;color:var(--text-2)}
@@ -886,22 +888,22 @@ loadStore();showList();updateProg();
 // ---- Ref panel ----
 function openRef(){
   document.getElementById('ref-overlay').classList.add('open');
-  refTab('all');
+  refTab('sousoku');
 }
 function closeRef(){
   document.getElementById('ref-overlay').classList.remove('open');
 }
 function refTab(key){
   document.querySelectorAll('#ref-tabs button').forEach(b=>b.classList.remove('active'));
-  event && event.target && event.target.classList.add('active');
+  const btn = document.querySelector(`#ref-tabs button[data-tab="${key}"]`);
+  if(btn) btn.classList.add('active');
   renderRefBody(key, '');
   document.getElementById('ref-q').value = '';
 }
 function refSearch(q){
-  const tabs = document.querySelectorAll('#ref-tabs button');
-  const activeTab = [...tabs].find(b=>b.classList.contains('active'));
-  const key = activeTab ? activeTab.getAttribute('onclick').match(/'(.*?)'/)?.[1] : 'all';
-  renderRefBody(key || 'all', q);
+  const activeTab = document.querySelector('#ref-tabs button.active');
+  const key = activeTab ? activeTab.dataset.tab : 'sousoku';
+  renderRefBody(key, q);
 }
 // 省庁名リスト（テーブルパース用）
 const REF_MINS = ['国会','裁判所','会計検査院','内閣府','内閣','デジタル庁','防災庁',
@@ -964,7 +966,7 @@ function parseMinistryTable(text, q) {
   let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>組織</th><th>項</th></tr></thead><tbody>';
   for (const r of rows) {
     const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
-    const itemHtml = items.map(s=>applyQ(escHtml(fmtLaw(s)), q)).join('<br>');
+    const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
     tbl += `<tr><td>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
   }
   tbl += '</tbody></table></div>';
@@ -1036,9 +1038,9 @@ function parseLimitTable(text, q) {
     if (!row.length) continue;
     const lastNum = row.reduce((li, t, i) => /^[\d,]+$/.test(t) ? i : li, -1);
     if (lastNum < 0) {
-      tbl += `<tr><td colspan="2">${applyQ(escHtml(fmtLaw(row.join(' '))), q)}</td></tr>`;
+      tbl += `<tr><td colspan="2">${applyQ(fmtLaw(escHtml(row.join(' '))), q)}</td></tr>`;
     } else {
-      const desc = applyQ(escHtml(fmtLaw(row.slice(0, lastNum).join(' '))), q);
+      const desc = applyQ(fmtLaw(escHtml(row.slice(0, lastNum).join(' '))), q);
       const amt  = escHtml(row[lastNum]);
       tbl += `<tr><td>${desc}</td><td style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${amt}</td></tr>`;
     }
@@ -1061,7 +1063,7 @@ function parseDebtTable(text, q) {
     const m = rt.trim().match(/^(\d+)\s+(.+)/s);
     if (!m) continue;
     const content = applyQ(
-      escHtml(fmtLaw(m[2].trim()))
+      fmtLaw(escHtml(m[2].trim()))
         .replace(/。\s*(\d{1,2})\s+(?=[^\d０-９])/g,
           (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)
         .replace(/。(?!<)/g, '。<br>'),
@@ -1082,7 +1084,7 @@ function formatContent(text, q) {
     let html = parts[0] && parts[0].trim() ? fmtProse(parts[0], q) : '';
     for (let i = 1; i < rawParts.length; i++) {
       const tblHtml = parseMinistryTable(rawParts[i], q);
-      html += tblHtml || `<div class="ref-text">${applyQ(escHtml(fmtLaw(parts[i] || '')), q)}</div>`;
+      html += tblHtml || `<div class="ref-text">${applyQ(fmtLaw(escHtml(parts[i] || '')), q)}</div>`;
     }
     return html;
   }
@@ -1091,14 +1093,20 @@ function formatContent(text, q) {
   return fmtProse(text, q);
 }
 
+// 甲〜参考の placeholder HTML
+function _refPlaceholder(title, desc){
+  return `<div class="ref-sec ref-placeholder"><h3>${escHtml(title)}</h3><p class="ref-text">${escHtml(desc)}</p></div>`;
+}
+
 function renderRefBody(key, q){
   const body = document.getElementById('ref-body');
   let html = '';
 
-  if(key === 'codes'){
+  if(key === 'sankou'){
+    // (参考) コード体系 + 予算書情報
     const cs = YOSAN_REF.codes;
     const ex = applyQ(escHtml(cs.example||''), q);
-    html += `<div class="ref-sec"><h3>コード体系 (11桁)</h3>`;
+    html += `<div class="ref-sec"><h3>コード番号について（コード体系 11桁）</h3>`;
     html += `<p class="ref-text">${applyQ(escHtml(cs.description||''),q)}</p>`;
     if(ex) html += `<p class="ref-text" style="margin-top:.4rem;font-family:monospace">${ex}</p>`;
     html += `<h3 style="margin-top:.8rem">使途別コード</h3>`;
@@ -1111,17 +1119,11 @@ function renderRefBody(key, q){
     for(const [k,v] of Object.entries(cs.moku_betsu||{}))
       html += `<tr><td>${escHtml(k)}</td><td>${applyQ(escHtml(v),q)}</td></tr>`;
     html += '</tbody></table></div>';
+    html += `<h3 style="margin-top:.8rem">予算書情報について</h3>`;
+    html += `<p class="ref-text">令和8年度一般会計予算のXMLデータは財務省 bb.mof.go.jp より取得。全236ファイル(Shift-JIS)をUTF-8変換して yosan_ref.json / xml_full.json に格納。予算総則テキストは16セクションに分割して本パネルで参照可能。歳出6,777目は各省各庁予定経費要求書等から抽出してこのレビューツールに収録。</p>`;
     html += '</div>';
-  } else {
-    const filter = {
-      'all':     ()=>true,
-      'koukyou': s=>s.title.includes('公共事業費'),
-      'idaie':   s=>s.title.includes('移替'),
-      'iyou':    s=>s.title.includes('移用'),
-      'syohizei':s=>s.title.includes('消費税'),
-    }[key] || (()=>true);
-
-    const secs = YOSAN_REF.sousoku.filter(filter).filter(s=>
+  } else if(key === 'sousoku'){
+    const secs = YOSAN_REF.sousoku.filter(s=>
       !q || s.title.includes(q) || s.content.includes(q)
     );
     if(secs.length === 0){
@@ -1132,6 +1134,19 @@ function renderRefBody(key, q){
         html += `<div class="ref-sec"><h3>${titleHtml}</h3>${formatContent(s.content, q)}</div>`;
       }
     }
+  } else {
+    const PLACEHOLDERS = {
+      'kou':    ['甲号 歳入歳出予算', '令和8年度一般会計の歳入・歳出予算額を款・項・目別に記載した予算書。歳出6,777目のデータはこの甲号から抽出し、本レビューツールに収録しています。'],
+      'otsu':   ['乙号 継続費', '複数年度にわたって支出が予定される継続費の総額・年割額を記載。工事・製造その他の事業に関する経費で、財政法第14条の2に基づく。'],
+      'hei':    ['丙号 繰越明許費', '歳出予算のうち、年度内に支出が終わらない見込みがある経費について翌年度への繰越を予め承認するもの（財政法第14条の3）。'],
+      'tei':    ['丁号 国庫債務負担行為', '法律に基づかず、国が将来の年度において債務を負担する行為を予算で定めたもの（財政法第15条）。限度額・年度を記載。'],
+      'fusoku': ['(添付) 公債の償還計画表', '財政法第4条第3項及び特例公債法に基づき令和8年度に発行を予定する公債の償還計画表。建設公債・特例公債それぞれの発行額・償還額・残高を記載。'],
+      'sainyuu':['令和8年度一般会計歳入予算明細書', '歳入の款・項・目別に収入の根拠・見積もり説明を記載した参照書。各収入科目の積算根拠が確認できる。'],
+      'youkyuu':['令和8年度一般会計各省各庁予定経費要求書等', '各省各庁が要求した歳出予算の説明書（積算根拠・事業説明）。本レビューツールの6,777目はこの要求書等の構造に対応。'],
+    };
+    const ph = PLACEHOLDERS[key];
+    if(ph) html = _refPlaceholder(ph[0], ph[1]);
+    else    html = '<p style="padding:1rem;color:var(--text-3)">不明なタブ</p>';
   }
   body.innerHTML = html;
 }
@@ -1143,12 +1158,15 @@ function renderRefBody(key, q){
     <div class="rp-hdr">
       <h2>📖 予算定義・規定</h2>
       <div id="ref-tabs">
-        <button class="active" onclick="refTab('all')">全条文</button>
-        <button onclick="refTab('koukyou')">公共事業費の範囲</button>
-        <button onclick="refTab('idaie')">移替え</button>
-        <button onclick="refTab('iyou')">移用</button>
-        <button onclick="refTab('syohizei')">消費税充当経費</button>
-        <button onclick="refTab('codes')">コード体系</button>
+        <button data-tab="sousoku" class="active" onclick="refTab('sousoku')">⒈ 予算総則</button>
+        <button data-tab="kou"     onclick="refTab('kou')">⒉ 甲号</button>
+        <button data-tab="otsu"    onclick="refTab('otsu')">⒊ 乙号</button>
+        <button data-tab="hei"     onclick="refTab('hei')">⒋ 丙号</button>
+        <button data-tab="tei"     onclick="refTab('tei')">⒌ 丁号</button>
+        <button data-tab="fusoku"  onclick="refTab('fusoku')">⒍ 公債償還</button>
+        <button data-tab="sainyuu" onclick="refTab('sainyuu')">⒎ 歳入明細</button>
+        <button data-tab="youkyuu" onclick="refTab('youkyuu')">⒏ 経費要求</button>
+        <button data-tab="sankou"  onclick="refTab('sankou')">⒐ 参考</button>
       </div>
       <div id="ref-search" style="padding:.5rem 1rem;border-bottom:1px solid var(--border)">
         <input type="text" id="ref-q" placeholder="条文内検索…" oninput="refSearch(this.value)">
