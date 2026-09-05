@@ -148,22 +148,24 @@ function applyQ(s, q){
 function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="ref-law">「${t}」</span>`); }
 
 function parseMinistryTable(text, q) {
-  const _JP = '[一-龯ぁ-ヾ々]';
-  const _jpjp = new RegExp('(' + _JP + ') +(' + _JP + ')', 'g');
-  let norm = text;
-  for (let i = 0; i < 5; i++) norm = norm.replace(_jpjp, '$1$2');
-  const tokens = norm.trim().split(/\s+/);
+  // yosan_ref.jsonは既にスペース区切りで正規化済みなので直接split
+  const tokens = text.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
-  const ORG_PAT = /[省庁院局所館委員会部課署関]$/;
+  const ORG_PAT = /[省庁院局所館委員会部課署関府房]$/;
   const rows = [];
   let cur = null;
   let buf = [];
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (minSet.has(t)) {
-      if (cur) { cur.items.push(buf.join(' ')); buf = []; rows.push(cur); }
-      cur = { ministry: t, org: '', items: [] };
-      buf = [];
+      if (cur && cur.org === '' && buf.length === 0) {
+        // 同名の省庁名が組織欄に来るケース (例: 裁判所→裁判所)
+        cur.org = t;
+      } else {
+        if (cur) { cur.items.push(buf.join(' ')); buf = []; rows.push(cur); }
+        cur = { ministry: t, org: '', items: [] };
+        buf = [];
+      }
     } else if (cur && t.length <= 20 && ORG_PAT.test(t) && !t.endsWith('費') && !t.endsWith('金') && !t.endsWith('金。')) {
       if (cur.org === '' && buf.length === 0) {
         cur.org = t;
@@ -186,6 +188,33 @@ function parseMinistryTable(text, q) {
     const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
     const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
     tbl += `<tr><td>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
+  }
+  tbl += '</tbody></table></div>';
+  return tbl;
+}
+
+// 主管 部 款 項 形式（第10条 歳入表など）
+function parseShukanTable(text, q) {
+  const tokens = text.trim().split(/\s+/);
+  const minSet = new Set(REF_MINS);
+  const rows = [];
+  let cur = null, buf = [], phase = 0; // phase: 0=items, 1=expect-bu, 2=expect-kan
+  for (const t of tokens) {
+    if (minSet.has(t)) {
+      if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); buf = []; }
+      cur = { ministry: t, bu: '', kan: '', items: [] };
+      phase = 1;
+    } else if (cur && phase === 1) { cur.bu = t; phase = 2; }
+    else if (cur && phase === 2) { cur.kan = t; phase = 0; }
+    else if (cur) { buf.push(t); }
+  }
+  if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); }
+  if (rows.length === 0) return null;
+  let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>主管</th><th>部</th><th>款</th><th>項</th></tr></thead><tbody>';
+  for (const r of rows) {
+    const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
+    const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
+    tbl += `<tr><td>${applyQ(escHtml(r.ministry),q)}</td><td>${applyQ(escHtml(normalizeText(r.bu)),q)}</td><td>${applyQ(escHtml(normalizeText(r.kan)),q)}</td><td>${itemHtml}</td></tr>`;
   }
   tbl += '</tbody></table></div>';
   return tbl;
@@ -287,6 +316,16 @@ function formatContent(text, q) {
     let html = parts[0] && parts[0].trim() ? fmtProse(parts[0], q) : '';
     for (let i = 1; i < rawParts.length; i++) {
       const tblHtml = parseMinistryTable(rawParts[i], q);
+      html += tblHtml || `<div class="ref-text">${applyQ(fmtLaw(escHtml(parts[i] || '')), q)}</div>`;
+    }
+    return html;
+  }
+  if (rawText.includes('主管 部 款 項')) {
+    const rawParts = rawText.split('主管 部 款 項');
+    const parts    = text.split('主管部款項');
+    let html = parts[0] && parts[0].trim() ? fmtProse(parts[0], q) : '';
+    for (let i = 1; i < rawParts.length; i++) {
+      const tblHtml = parseShukanTable(rawParts[i], q);
       html += tblHtml || `<div class="ref-text">${applyQ(fmtLaw(escHtml(parts[i] || '')), q)}</div>`;
     }
     return html;
