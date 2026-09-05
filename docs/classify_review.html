@@ -185,6 +185,9 @@ tr:hover td{background:var(--accent-lt);cursor:pointer}
 .ref-numtbl-wrap th{padding:.3rem .6rem;background:var(--surface);font-weight:700;
   border:1px solid var(--border);color:var(--text-3);font-size:.7rem;text-align:left}
 .ref-numtbl-wrap td{padding:.3rem .6rem;border:1px solid var(--border);vertical-align:top;line-height:1.5}
+.ref-item-num{display:inline-flex;align-items:center;justify-content:center;
+  width:1.5em;height:1.5em;border-radius:50%;background:var(--accent);color:#fff;
+  font-size:.7rem;font-weight:700;margin:0 .2em .1em;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -953,61 +956,99 @@ function parseMinistryTable(text, q) {
   return tbl;
 }
 
-// 数値+タブ形式（損失補償・債務保証の表）を2列テーブルに
-function parseNumTable(text, q) {
-  // 「区分 限度額(千円)」または「債務 根拠規定 金額の限度」パターン
-  const lines = text.split(/(?=\d+\s+[^\d])/);
-  if (lines.length < 3) return null;
-  let tbl = '<div class="ref-numtbl-wrap"><table><tbody>';
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const m = line.match(/^(\d+)\s+(.+)/s);
-    if (m) {
-      tbl += `<tr><td style="white-space:nowrap;font-weight:700">${escHtml(m[1])}</td><td>${applyQ(escHtml(fmtLaw(m[2].trim())),q)}</td></tr>`;
+// 共通: 条文本文の整形（項番号バッジ・句点改行・法律名・条番号強調）
+function fmtProse(text, q) {
+  const s = escHtml(text)
+    // 法律名「｢...｣」をバッジに
+    .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
+    // 条番号・表番号を太字に
+    .replace(/第\s*(\d+)\s*条/g, '<strong>第$1条</strong>')
+    .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>')
+    // 句点の後の「 2 〇〇。」形式の項番号をバッジ+改行に
+    .replace(/。\s*(\d{1,2})\s+(?=[^\d０-９])/g,
+      (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)
+    // 残りの句点で改行
+    .replace(/。(?!<)/g, '。<br>');
+  return `<div class="ref-clause ref-text">${applyQ(s, q)}</div>`;
+}
+
+// 区分/限度額テーブル（第12条 損失補償等）
+function parseLimitTable(text, q) {
+  const sep = '区分 限度額(千円)';
+  const idx = text.indexOf(sep);
+  const prose = idx > 0 ? text.slice(0, idx) : '';
+  const tableText = idx >= 0 ? text.slice(idx + sep.length) : text;
+
+  // トークン列から「説明(非数値連続) 金額(数値)」の行を切り出す
+  const tokens = tableText.trim().split(/\s+/);
+  const rows = [];
+  let cur = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    const isNum = /^[\d,]+$/.test(t);
+    cur.push(t);
+    // 数値トークンの後ろが非数値 → 行区切り
+    if (isNum && (i + 1 >= tokens.length || !/^[\d,]+$/.test(tokens[i+1]))) {
+      rows.push([...cur]); cur = [];
+    }
+  }
+  if (cur.length) rows.push(cur);
+
+  let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>区分</th><th style="text-align:right">限度額（千円）</th></tr></thead><tbody>';
+  for (const row of rows) {
+    if (!row.length) continue;
+    const lastNum = row.reduce((li, t, i) => /^[\d,]+$/.test(t) ? i : li, -1);
+    if (lastNum < 0) {
+      tbl += `<tr><td colspan="2">${applyQ(escHtml(fmtLaw(row.join(' '))), q)}</td></tr>`;
     } else {
-      tbl += `<tr><td colspan="2">${applyQ(escHtml(fmtLaw(line.trim())),q)}</td></tr>`;
+      const desc = applyQ(escHtml(fmtLaw(row.slice(0, lastNum).join(' '))), q);
+      const amt  = escHtml(row[lastNum]);
+      tbl += `<tr><td>${desc}</td><td style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${amt}</td></tr>`;
     }
   }
   tbl += '</tbody></table></div>';
-  return tbl;
+  return (prose.trim() ? fmtProse(prose, q) : '') + tbl;
+}
+
+// 債務保証テーブル（第13条）: 番号付き行で区切り
+function parseDebtTable(text, q) {
+  const sep = '債務 根拠規定 金額の限度';
+  const idx = text.indexOf(sep);
+  const prose = idx > 0 ? text.slice(0, idx) : '';
+  const tableText = idx >= 0 ? text.slice(idx + sep.length) : text;
+
+  // 先頭の数字で行分割
+  const rowTexts = tableText.trim().split(/(?=\s\d+\s+[^\d\s])/);
+  let tbl = '<div class="ref-numtbl-wrap"><table><thead><tr><th>#</th><th>債務 ／ 根拠規定 ／ 金額</th></tr></thead><tbody>';
+  for (const rt of rowTexts) {
+    const m = rt.trim().match(/^(\d+)\s+(.+)/s);
+    if (!m) continue;
+    const content = applyQ(
+      escHtml(fmtLaw(m[2].trim()))
+        .replace(/。\s*(\d{1,2})\s+(?=[^\d０-９])/g,
+          (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)
+        .replace(/。(?!<)/g, '。<br>'),
+      q
+    );
+    tbl += `<tr><td style="font-weight:700;white-space:nowrap;vertical-align:top">${escHtml(m[1])}</td><td>${content}</td></tr>`;
+  }
+  tbl += '</tbody></table></div>';
+  return (prose.trim() ? fmtProse(prose, q) : '') + tbl;
 }
 
 function formatContent(text, q) {
-  // 「所管 組織 項」を含む条文は表形式に
-  const hasMinTable = text.includes('所管 組織 項');
-  let html = '';
-
-  if (hasMinTable) {
-    // 本文部分（「所管 組織 項」前）と表部分に分割
+  if (text.includes('所管 組織 項')) {
     const parts = text.split('所管 組織 項');
-    // 最初は条文本文
-    const prose = parts[0].trim();
-    if (prose) {
-      html += `<div class="ref-clause ref-text">${applyQ(escHtml(fmtLaw(prose)).replace(/。/g,'。<br>').replace(/第(\d+)条/g,'<strong>第$1条</strong>').replace(/第(\d+)表/g,'<br><strong>第$1表</strong>'), q)}</div>`;
-    }
-    // 表データ部分（複数の「所管 組織 項」ブロックがある場合）
+    let html = parts[0].trim() ? fmtProse(parts[0], q) : '';
     for (let i = 1; i < parts.length; i++) {
-      let tableData = parts[i];
-      // 次の「所管 組織 項」がなければそのままパース
-      // 前後の文章分離（数字で始まる表番号など）
-      const tblHtml = parseMinistryTable(tableData, q);
-      if (tblHtml) {
-        html += tblHtml;
-      } else {
-        html += `<div class="ref-text">${applyQ(escHtml(fmtLaw(tableData)), q)}</div>`;
-      }
+      const tblHtml = parseMinistryTable(parts[i], q);
+      html += tblHtml || `<div class="ref-text">${applyQ(escHtml(fmtLaw(parts[i])), q)}</div>`;
     }
-  } else {
-    // 通常の条文: 句点で改行、法律名を強調
-    const formatted = escHtml(text)
-      .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
-      .replace(/。/g, '。<br>')
-      .replace(/第(\s*\d+\s*)条/g, '<strong>第$1条</strong>')
-      .replace(/第(\s*\d+\s*)表/g, '<br><strong>第$1表</strong>')
-      .replace(/^\s*(\d+)\s+/gm, '<b>$1.</b> ');
-    html = `<div class="ref-clause ref-text">${applyQ(formatted, q)}</div>`;
+    return html;
   }
-  return html;
+  if (text.includes('区分 限度額')) return parseLimitTable(text, q);
+  if (text.includes('債務 根拠規定')) return parseDebtTable(text, q);
+  return fmtProse(text, q);
 }
 
 function renderRefBody(key, q){
