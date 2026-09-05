@@ -85,6 +85,8 @@ input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .ref-tbl-wrap td:first-child{font-weight:700;white-space:nowrap;color:var(--text)}
 .ref-tbl-wrap td:nth-child(2){white-space:nowrap;color:var(--text-2)}
 .ref-tbl-wrap td:nth-child(3){color:var(--text-2);font-size:.76rem}
+.ref-item{padding:.25rem 0}
+.ref-item+.ref-item{border-top:1px solid var(--border)}
 .ref-clause{margin-bottom:.6rem;padding-bottom:.6rem;border-bottom:1px solid var(--border)}
 .ref-clause:last-child{border-bottom:none}
 .ref-law{background:var(--surface);border:1px solid var(--border);border-radius:3px;
@@ -149,6 +151,22 @@ function applyQ(s, q){
 }
 function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="ref-law">「${t}」</span>`); }
 
+function splitTopLevel(text) {
+  // 括弧内の読点を無視してトップレベルの「、」で分割
+  const result = []; let depth = 0, start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c==='('||c==='（') depth++;
+    else if (c===')'||c==='）') depth--;
+    else if ((c==='、'||c===',') && depth===0) {
+      const s = text.slice(start,i).trim(); if(s) result.push(s);
+      start = i+1;
+    }
+  }
+  const s = text.slice(start).trim(); if(s) result.push(s);
+  return result;
+}
+
 function _parseMinistryRows(text) {
   const tokens = text.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
@@ -171,8 +189,8 @@ function _parseMinistryRows(text) {
 function _renderMinistryTbl(rows, headers, q) {
   let tbl = `<div class="ref-tbl-wrap"><table><thead><tr>${headers.map(h=>`<th>${escHtml(h)}</th>`).join('')}</tr></thead><tbody>`;
   for (const r of rows) {
-    const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
-    const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)),q)).join('<br>');
+    const items = splitTopLevel(normalizeText(r.items.join(' '))).filter(Boolean);
+    const itemHtml = items.map(s=>`<div class="ref-item">${applyQ(fmtLaw(escHtml(normalizeText(s))),q)}</div>`).join('');
     tbl += `<tr><td>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
   }
   return tbl + '</tbody></table></div>';
