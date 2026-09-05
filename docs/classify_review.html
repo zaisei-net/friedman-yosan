@@ -918,8 +918,19 @@ function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="
 
 // 「所管 組織 項」形式のテーブルをHTMLテーブルに変換
 function parseMinistryTable(text, q) {
-  const tokens = text.trim().split(/\s+/);  // パース時は正規化前（省庁名スペース区切りを維持）
+  // jpjpのみ適用: カタカナ分割(イノベーショ ン→イノベーション)を修正
+  // ）→省庁スペースは維持（省庁名のトークン境界に必要）
+  const _JP = '[一-龯ぁ-ヾ々]';
+  const _jpjp = new RegExp('(' + _JP + ') +(' + _JP + ')', 'g');
+  let norm = text;
+  for (let i = 0; i < 5; i++) norm = norm.replace(_jpjp, '$1$2');
+
+  const tokens = norm.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
+  // 省庁院局所館委員会部課: 通常の外局・地方支分局
+  // 署: 産業保安監督官署等
+  // 関: 税関・厚生労働本省試験研究機関等
+  const ORG_PAT = /[省庁院局所館委員会部課署関]$/;
   const rows = [];
   let cur = null;
   let buf = [];
@@ -930,13 +941,17 @@ function parseMinistryTable(text, q) {
       if (cur) { cur.items.push(buf.join(' ')); buf = []; rows.push(cur); }
       cur = { ministry: t, org: '', items: [] };
       buf = [];
-    } else if (cur && cur.org === '' && !t.endsWith('費') && !t.endsWith('金') && !t.endsWith('金。') && buf.length === 0) {
-      // 次のトークンが「費」で終わる事項名でなければ組織名
-      // ヒューリスティック: 組織名は短く(30文字以下)「省」「庁」「院」「局」「所」「会」で終わる
-      if (t.length <= 20 && /[省庁院局所館委員会部課]$/.test(t)) {
-        cur.org = t;
+    } else if (cur && t.length <= 20 && ORG_PAT.test(t) && !t.endsWith('費') && !t.endsWith('金') && !t.endsWith('金。')) {
+      if (cur.org === '' && buf.length === 0) {
+        cur.org = t;                          // 最初の組織名
+      } else if (cur.org !== '') {
+        // 同一省の次の組織（外局・地方支分局等）→ 現行行を確定して新しいサブ行を作成
+        cur.items.push(buf.join(' ')); buf = [];
+        const ministry = cur.ministry;
+        rows.push(cur);
+        cur = { ministry, org: t, items: [] };
       } else {
-        buf.push(t);
+        buf.push(t);                          // org=''だがbuf非空 → アイテムとして扱う
       }
     } else if (cur) {
       buf.push(t);
