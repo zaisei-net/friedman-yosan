@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>フリードマン予算構想</title>
+<style>
+:root{
+  --bg:#fff;--surface:#f8f9fa;--border:#e2e6ea;
+  --text:#1a1d21;--text-2:#555;--text-3:#888;
+  --accent:#2563eb;--accent-lt:#eff6ff;
+  --radius:6px;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111;--surface:#1c1c1e;--border:#2c2c2e;
+  --text:#f0f0f0;--text-2:#bbb;--text-3:#666;
+  --accent:#60a5fa;--accent-lt:#1e3a5f;
+}}
+:root[data-theme="dark"]{
+  --bg:#111;--surface:#1c1c1e;--border:#2c2c2e;
+  --text:#f0f0f0;--text-2:#bbb;--text-3:#666;
+  --accent:#60a5fa;--accent-lt:#1e3a5f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN',sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.7;
+  min-height:100vh;padding:2rem 1rem}
+.wrap{max-width:700px;margin:0 auto}
+h1{font-size:1.4rem;font-weight:800;margin-bottom:.4rem}
+.subtitle{color:var(--text-3);font-size:.85rem;margin-bottom:2rem}
+.section{margin-bottom:2rem}
+.section-label{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-3);margin-bottom:.6rem}
+.card{display:block;border:1px solid var(--border);border-radius:var(--radius);
+  padding:1rem 1.2rem;text-decoration:none;color:inherit;margin-bottom:.6rem;
+  background:var(--surface);transition:border-color .15s}
+.card:hover{border-color:var(--accent)}
+.card-title{font-weight:700;font-size:.95rem;margin-bottom:.25rem}
+.card-title .badge{font-size:.65rem;font-weight:600;padding:.1em .45em;border-radius:3px;
+  vertical-align:middle;margin-left:.4em}
+.badge-active{background:var(--accent-lt);color:var(--accent)}
+.badge-ref{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+.badge-archive{background:var(--surface);color:var(--text-3);border:1px solid var(--border)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .badge-ref{background:#052e16;color:#4ade80;border-color:#166534}}
+:root[data-theme="dark"] .badge-ref{background:#052e16;color:#4ade80;border-color:#166534}
+.card-desc{font-size:.82rem;color:var(--text-2)}
+.theme-btn{position:fixed;top:1rem;right:1rem;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);border-radius:var(--radius);
+  padding:.3em .7em;cursor:pointer;font-size:13px}
+</style>
+</head>
+<body>
+<button class="theme-btn" onclick="document.documentElement.setAttribute('data-theme',document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark')">🌓</button>
+<div class="wrap">
+  <h1>フリードマン予算構想</h1>
+  <p class="subtitle">令和8年度一般会計歳出6,777目をミルトン・フリードマンの10分類で審査するプロジェクト</p>
+
+  <div class="section">
+    <div class="section-label">作業ツール</div>
+    <a class="card" href="classify_review.html">
+      <div class="card-title">歳出分類レビュー <span class="badge badge-active">作業中</span></div>
+      <div class="card-desc">6,777目を1件ずつ審査。フリードマン分類・判定・根拠を記録。localStorage保存・CSV出力対応。</div>
+    </a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">参照資料</div>
+    <a class="card" href="yosan_ref.html">
+      <div class="card-title">予算定義・規定 <span class="badge badge-ref">参照</span></div>
+      <div class="card-desc">令和8年度予算総則（全16条）・コード体系・甲号〜参考の構造説明。分類審査の根拠確認に使用。</div>
+    </a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">アーカイブ</div>
+    <a class="card" href="classify_ippan.html">
+      <div class="card-title">一般会計分類結果（旧版） <span class="badge badge-archive">凍結</span></div>
+      <div class="card-desc">3,409目を分類した旧スナップショット。現行レビュー（6,777目）に引き継がれており、このファイルは更新されません。</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>
