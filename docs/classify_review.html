@@ -918,7 +918,7 @@ function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="
 
 // 「所管 組織 項」形式のテーブルをHTMLテーブルに変換
 function parseMinistryTable(text, q) {
-  const tokens = text.trim().split(/\s+/);
+  const tokens = normalizeText(text).trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
   const rows = [];
   let cur = null;
@@ -956,9 +956,18 @@ function parseMinistryTable(text, q) {
   return tbl;
 }
 
+// CDATAスペース正規化: 日本語↔数字間・コンマ前後の半角スペースを除去
+function normalizeText(text) {
+  return text
+    .replace(/([一-龯ぁ-んァ-ン])\s+(\d)/g, '$1$2')   // 漢字等の後のスペース
+    .replace(/(\d)\s+([一-龯ぁ-んァ-ン])/g, '$1$2')   // 数字の後のスペース
+    .replace(/(\d)\s+([,、])/g, '$1$2')                 // 数字とコンマの間
+    .replace(/([,、])\s+(\d)/g, '$1$2');                // コンマと数字の間
+}
+
 // 共通: 条文本文の整形（項番号バッジ・句点改行・法律名・条番号強調）
 function fmtProse(text, q) {
-  const s = escHtml(text)
+  const s = escHtml(normalizeText(text))
     // 法律名「｢...｣」をバッジに
     .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
     // 条番号・表番号を太字に
@@ -1037,6 +1046,7 @@ function parseDebtTable(text, q) {
 }
 
 function formatContent(text, q) {
+  text = normalizeText(text);
   if (text.includes('所管 組織 項')) {
     const parts = text.split('所管 組織 項');
     let html = parts[0].trim() ? fmtProse(parts[0], q) : '';
