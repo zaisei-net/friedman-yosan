@@ -918,7 +918,7 @@ function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="
 
 // 「所管 組織 項」形式のテーブルをHTMLテーブルに変換
 function parseMinistryTable(text, q) {
-  const tokens = normalizeText(text).trim().split(/\s+/);
+  const tokens = text.trim().split(/\s+/);  // パース時は正規化前（省庁名スペース区切りを維持）
   const minSet = new Set(REF_MINS);
   const rows = [];
   let cur = null;
@@ -948,21 +948,34 @@ function parseMinistryTable(text, q) {
 
   let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>組織</th><th>項</th></tr></thead><tbody>';
   for (const r of rows) {
-    const items = r.items.join(' ').split(/[、,]/).map(s=>s.trim()).filter(Boolean);
+    const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
     const itemHtml = items.map(s=>applyQ(escHtml(fmtLaw(s)), q)).join('<br>');
-    tbl += `<tr><td>${applyQ(escHtml(r.ministry),q)}</td><td>${applyQ(escHtml(r.org),q)}</td><td>${itemHtml}</td></tr>`;
+    tbl += `<tr><td>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
   }
   tbl += '</tbody></table></div>';
   return tbl;
 }
 
-// CDATAスペース正規化: 日本語↔数字間・コンマ前後の半角スペースを除去
+// CDATAスペース正規化
 function normalizeText(text) {
-  return text
-    .replace(/([一-龯ぁ-んァ-ン])\s+(\d)/g, '$1$2')   // 漢字等の後のスペース
-    .replace(/(\d)\s+([一-龯ぁ-んァ-ン])/g, '$1$2')   // 数字の後のスペース
-    .replace(/(\d)\s+([,、])/g, '$1$2')                 // 数字とコンマの間
-    .replace(/([,、])\s+(\d)/g, '$1$2');                // コンマと数字の間
+  const JP = '[一-龯ぁ-ヾ々]';  // 漢字+ひらがな+カタカナ（長音符ーU+30FC含む）
+  const jpjp = new RegExp('(' + JP + ') +(' + JP + ')', 'g');
+  const jpn  = new RegExp('(' + JP + ') +(\\d)', 'g');
+  const njp  = new RegExp('(\\d) +(' + JP + ')', 'g');
+  let t = text;
+  // 漢字・かな・カタカナ間のスペース（連続する場合があるため5回繰り返す）
+  for (let i = 0; i < 5; i++) t = t.replace(jpjp, '$1$2');
+  return t
+    .replace(jpn,  '$1$2')                                    // 日本語→数字
+    .replace(njp,  '$1$2')                                    // 数字→日本語
+    .replace(/([)）]) +([一-龯ぁ-ヾ々])/g,  '$1$2')          // )の後の日本語
+    .replace(/｣ +([一-龯ぁ-ヾ々])/g,        '｣$1')           // ｣の後の日本語
+    .replace(/([一-龯ぁ-ヾ々\d]) +｢/g,      '$1｢')           // 日本語・数字の後の｢
+    .replace(/、 +([一-龯ぁ-ヾ々（(])/g,    '、$1')           // 、の後の日本語
+    .replace(/。 +([一-龯ぁ-ヾ々])/g,       '。$1')           // 。の後の日本語（数字は維持）
+    .replace(/｡ +([一-龯ぁ-ヾ々（(｢])/g,   '｡$1')            // ｡の後の日本語
+    .replace(/(\d) +([,、])/g,              '$1$2')           // 数字→コンマ
+    .replace(/([,、]) +(\d)/g,              '$1$2');          // コンマ→数字
 }
 
 // 共通: 条文本文の整形（項番号バッジ・句点改行・法律名・条番号強調）
@@ -1046,18 +1059,20 @@ function parseDebtTable(text, q) {
 }
 
 function formatContent(text, q) {
+  const rawText = text;              // 正規化前を保持（テーブルパーサはスペース区切りが必要）
   text = normalizeText(text);
-  if (text.includes('所管 組織 項')) {
-    const parts = text.split('所管 組織 項');
-    let html = parts[0].trim() ? fmtProse(parts[0], q) : '';
-    for (let i = 1; i < parts.length; i++) {
-      const tblHtml = parseMinistryTable(parts[i], q);
-      html += tblHtml || `<div class="ref-text">${applyQ(escHtml(fmtLaw(parts[i])), q)}</div>`;
+  if (rawText.includes('所管 組織 項')) {
+    const rawParts = rawText.split('所管 組織 項');
+    const parts    = text.split('所管組織項');  // 正規化後はスペースなし
+    let html = parts[0] && parts[0].trim() ? fmtProse(parts[0], q) : '';
+    for (let i = 1; i < rawParts.length; i++) {
+      const tblHtml = parseMinistryTable(rawParts[i], q);
+      html += tblHtml || `<div class="ref-text">${applyQ(escHtml(fmtLaw(parts[i] || '')), q)}</div>`;
     }
     return html;
   }
-  if (text.includes('区分 限度額')) return parseLimitTable(text, q);
-  if (text.includes('債務 根拠規定')) return parseDebtTable(text, q);
+  if (rawText.includes('区分 限度額')) return parseLimitTable(rawText, q);
+  if (rawText.includes('債務 根拠規定')) return parseDebtTable(rawText, q);
   return fmtProse(text, q);
 }
 
