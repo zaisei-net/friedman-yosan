@@ -97,6 +97,8 @@ input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .ref-item-num{display:inline-flex;align-items:center;justify-content:center;
   width:1.5em;height:1.5em;border-radius:50%;background:var(--accent);color:#fff;
   font-size:.7rem;font-weight:700;margin:0 .2em .1em;vertical-align:middle}
+.ref-subtbl-title{margin:1rem 0 .3rem;font-size:.8rem;font-weight:700;color:var(--text-2);letter-spacing:.03em}
+.ref-amount-tbl td:last-child{text-align:right;font-variant-numeric:tabular-nums}
 
 @media(max-width:600px){
   #sidebar{width:100%;flex-direction:row;display:flex;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border)}
@@ -147,50 +149,109 @@ function applyQ(s, q){
 }
 function fmtLaw(s){ return s.replace(/｢([^｣]+?)｣/g, (_, t)=>`<span class="ref-law">「${t}」</span>`); }
 
-function parseMinistryTable(text, q) {
-  // yosan_ref.jsonは既にスペース区切りで正規化済みなので直接split
+function _parseMinistryRows(text) {
   const tokens = text.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
   const ORG_PAT = /[省庁院局所館委員会部課署関府房]$/;
-  const rows = [];
-  let cur = null;
-  let buf = [];
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
+  const rows = []; let cur = null, buf = [];
+  for (const t of tokens) {
     if (minSet.has(t)) {
-      if (cur && cur.org === '' && buf.length === 0) {
-        // 同名の省庁名が組織欄に来るケース (例: 裁判所→裁判所)
-        cur.org = t;
-      } else {
-        if (cur) { cur.items.push(buf.join(' ')); buf = []; rows.push(cur); }
-        cur = { ministry: t, org: '', items: [] };
-        buf = [];
-      }
-    } else if (cur && t.length <= 20 && ORG_PAT.test(t) && !t.endsWith('費') && !t.endsWith('金') && !t.endsWith('金。')) {
-      if (cur.org === '' && buf.length === 0) {
-        cur.org = t;
-      } else if (cur.org !== '') {
-        cur.items.push(buf.join(' ')); buf = [];
-        const ministry = cur.ministry;
-        rows.push(cur);
-        cur = { ministry, org: t, items: [] };
-      } else {
-        buf.push(t);
-      }
-    } else if (cur) {
-      buf.push(t);
-    }
+      if (cur && !cur.org && !buf.length) { cur.org = t; }
+      else { if (cur) { cur.items.push(buf.splice(0).join(' ')); rows.push(cur); } cur = {ministry:t,org:'',items:[]}; }
+    } else if (cur && t.length<=20 && ORG_PAT.test(t) && !t.endsWith('費') && !t.endsWith('金') && !t.endsWith('金。')) {
+      if (!cur.org && !buf.length) { cur.org = t; }
+      else if (cur.org) { cur.items.push(buf.splice(0).join(' ')); rows.push(cur); cur = {ministry:cur.ministry,org:t,items:[]}; }
+      else { buf.push(t); }
+    } else if (cur) { buf.push(t); }
   }
   if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); }
-  if (rows.length === 0) return null;
-  let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>組織</th><th>項</th></tr></thead><tbody>';
+  return rows;
+}
+
+function _renderMinistryTbl(rows, headers, q) {
+  let tbl = `<div class="ref-tbl-wrap"><table><thead><tr>${headers.map(h=>`<th>${escHtml(h)}</th>`).join('')}</tr></thead><tbody>`;
   for (const r of rows) {
     const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
-    const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
+    const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)),q)).join('<br>');
     tbl += `<tr><td>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
   }
-  tbl += '</tbody></table></div>';
-  return tbl;
+  return tbl + '</tbody></table></div>';
+}
+
+function parseMinistryTable(text, q) {
+  const rows = _parseMinistryRows(text);
+  if (!rows.length) return null;
+  return _renderMinistryTbl(rows, ['所管','組織','項'], q);
+}
+
+// 第6条: 公債発行限度額
+function parseKosaiTable(rawText, q) {
+  const m1 = rawText.match(/第\s*4\s*条第\s*1\s*項.*?([\d,]+)\s*千円とする/s);
+  const m2 = rawText.match(/財政運営に必要な財源.*?([\d,]+)\s*千円とする/s);
+  let html = '<div class="ref-tbl-wrap ref-amount-tbl"><table><thead><tr><th>区分</th><th>限度額（千円）</th></tr></thead><tbody>';
+  if (m1) html += `<tr><td>建設公債（財政法第4条）</td><td>${escHtml(m1[1])}</td></tr>`;
+  if (m2) html += `<tr><td>特例公債（特例法）</td><td>${escHtml(m2[1])}</td></tr>`;
+  html += '</tbody></table></div>';
+  return html + fmtProse(normalizeText(rawText), q);
+}
+
+// 第16条: 予算の移用 (第1表〜第3表)
+function parseIyoTable(rawText, q) {
+  const markers = [];
+  const re = /第\s*(\d)\s*表　/g; let m;
+  while ((m = re.exec(rawText)) !== null) markers.push({n:+m[1], idx:m.index});
+  if (!markers.length) return fmtProse(normalizeText(rawText), q);
+  markers[markers.length-1].end = rawText.length;
+  for (let i=0;i<markers.length-1;i++) markers[i].end = markers[i+1].idx;
+  const preamble = rawText.slice(0, markers[0].idx);
+  let html = preamble.trim() ? fmtProse(normalizeText(preamble), q) : '';
+  for (const s of markers) {
+    const chunk = rawText.slice(s.idx, s.end);
+    if (s.n===1) html += renderIyo1(chunk, q);
+    else if (s.n===2) html += renderIyo2(chunk, q);
+    else html += renderIyo3(chunk, q);
+  }
+  return html;
+}
+
+function _stripRowNums(text) {
+  const minPat = '(?:' + REF_MINS.join('|') + ')';
+  return text.trim().replace(new RegExp(`\\s*\\d+\\s+(?=${minPat})`, 'g'), ' ');
+}
+
+function renderIyo1(text, q) {
+  const hEnd = text.indexOf('）') >= 0 ? text.indexOf('）') + 1 :
+               text.indexOf('｡)') >= 0 ? text.indexOf('｡)') + 2 : -1;
+  const body = hEnd >= 0 ? text.slice(hEnd) : text.replace(/第\s*1\s*表\S*/, '');
+  const stripped = _stripRowNums(body);
+  const minSet = new Set(REF_MINS);
+  const tokens = stripped.split(/\s+/);
+  const rows = []; let cur = null, buf = [];
+  for (const t of tokens) {
+    if (minSet.has(t)) { if (cur) rows.push({ministry:cur, content:buf.join(' ')}); cur=t; buf=[]; }
+    else if (cur) buf.push(t);
+  }
+  if (cur) rows.push({ministry:cur, content:buf.join(' ')});
+  if (!rows.length) return fmtProse(normalizeText(text), q);
+  let tbl = '<h4 class="ref-subtbl-title">第1表　各組織の間の移用</h4><div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>移用することができる組織</th></tr></thead><tbody>';
+  for (const r of rows) {
+    tbl += `<tr><td style="vertical-align:top;white-space:nowrap">${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(fmtLaw(escHtml(normalizeText(r.content))),q)}</td></tr>`;
+  }
+  return tbl + '</tbody></table></div>';
+}
+
+function renderIyo2(text, q) {
+  const hdr = '移用することができる項';
+  const hdrIdx = text.indexOf(hdr);
+  const body = hdrIdx >= 0 ? text.slice(hdrIdx + hdr.length) : text;
+  const rows = _parseMinistryRows(_stripRowNums(body));
+  if (!rows.length) return fmtProse(normalizeText(text), q);
+  return '<h4 class="ref-subtbl-title">第2表　各項の間の移用</h4>' + _renderMinistryTbl(rows, ['所管','組織','移用することができる項'], q);
+}
+
+function renderIyo3(text, q) {
+  const body = text.replace(/第\s*3\s*表　[^\d]*/, '');
+  return '<h4 class="ref-subtbl-title">第3表　各組織の間又は各項の間の移用</h4>' + fmtProse(normalizeText(body), q);
 }
 
 // 主管 部 款 項 形式（第10条 歳入表など）
@@ -332,6 +393,8 @@ function formatContent(text, q) {
   }
   if (rawText.includes('区分 限度額')) return parseLimitTable(rawText, q);
   if (rawText.includes('債務 根拠規定')) return parseDebtTable(rawText, q);
+  if (rawText.includes('財政法｣第 4 条第 1 項ただし書')) return parseKosaiTable(rawText, q);
+  if (rawText.includes('第 1 表　')) return parseIyoTable(rawText, q);
   return fmtProse(text, q);
 }
 
