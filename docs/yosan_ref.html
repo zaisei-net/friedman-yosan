@@ -318,7 +318,7 @@ function renderRefBody(key, q){
   const body = document.getElementById('ref-body');
   let html = '';
   if(key === 'sankou'){
-    const cs = YOSAN_REF.codes;
+    const cs = YOSAN_REF.code_system;
     const ex = applyQ(escHtml(cs.example||''), q);
     html += `<div class="ref-sec"><h3>コード番号について（コード体系 11桁）</h3>`;
     html += `<p class="ref-text">${applyQ(escHtml(cs.description||''),q)}</p>`;
@@ -337,7 +337,7 @@ function renderRefBody(key, q){
     html += `<p class="ref-text">令和8年度一般会計予算のXMLデータは財務省 bb.mof.go.jp より取得。全236ファイル(Shift-JIS)をUTF-8変換して yosan_ref.json / xml_full.json に格納。予算総則テキストは16セクションに分割して本ページで参照可能。歳出6,777目は各省各庁予定経費要求書等から抽出して classify_review.html に収録。</p>`;
     html += '</div>';
   } else if(key === 'sousoku'){
-    const secs = YOSAN_REF.sousoku.filter(s=>
+    const secs = YOSAN_REF.yosan_sousoku.filter(s=>
       !q || s.title.includes(q) || s.content.includes(q)
     );
     if(secs.length === 0){
