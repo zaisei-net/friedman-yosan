@@ -317,6 +317,19 @@ function normalizeText(text) {
     .replace(/([,、]) +(\d)/g,              '$1$2');
 }
 
+function breakPeriods(s) {
+  let out = '', depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '<') { const e = s.indexOf('>', i); if (e >= 0) { out += s.slice(i, e+1); i = e; } else out += c; }
+    else if (c === '(' || c === '（') { depth++; out += c; }
+    else if (c === ')' || c === '）') { if (depth > 0) depth--; out += c; }
+    else if ((c === '。' || c === '｡') && depth === 0) { out += c + '<br>'; }
+    else out += c;
+  }
+  return out;
+}
+
 function fmtProse(text, q) {
   // normalizeTextより先に項番号を検出（normalizeTextが「3 第」→「3第」にしてスペースを消すため）
   const paraRe = /[。｡]\s*(\d{1,2})\s+(?=[^\d０-９])/g;
@@ -339,10 +352,9 @@ function fmtProse(text, q) {
     const h = escHtml(normalizeText(s.text))
       .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
       .replace(/第\s*(\d+)\s*条/g, '<strong>第$1条</strong>')
-      .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>')
-      .replace(/[。｡](?!<)/g, '$&<br>');
+      .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>');
     const pre = s.num ? `<span class="ref-item-num">${s.num}</span>&ensp;` : '';
-    return `<div class="ref-clause ref-text">${pre}${applyQ(h, q)}</div>`;
+    return `<div class="ref-clause ref-text">${pre}${applyQ(breakPeriods(h), q)}</div>`;
   }
 
   const html = segs.filter(s => s.text.trim()).map(renderSeg).join('');
@@ -393,10 +405,9 @@ function parseDebtTable(text, q) {
     const m = rt.trim().match(/^(\d+)\s+(.+)/s);
     if (!m) continue;
     const content = applyQ(
-      fmtLaw(escHtml(m[2].trim()))
+      breakPeriods(fmtLaw(escHtml(m[2].trim()))
         .replace(/[。｡]\s*(\d{1,2})\s+(?=[^\d０-９])/g,
-          (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)
-        .replace(/[。｡](?!<)/g, '$&<br>'),
+          (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)),
       q
     );
     tbl += `<tr><td style="font-weight:700;white-space:nowrap;vertical-align:top">${escHtml(m[1])}</td><td>${content}</td></tr>`;
