@@ -288,21 +288,25 @@ function _parseShukanRows(text) {
   const minSet = new Set(REF_MINS);
   const rows = [];
   let cur = null, buf = [], phase = 0;
-  for (const t of tokens) {
+  let stopIdx = tokens.length;
+  for (let ti = 0; ti < tokens.length; ti++) {
+    const t = tokens[ti];
     if (minSet.has(t)) {
-      if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); buf = []; }
+      if (cur) { cur.items.push(...buf); rows.push(cur); buf = []; }
       cur = { ministry: t, bu: '', kan: '', items: [] };
       phase = 1;
     } else if (cur && phase === 0 && /^\d$/.test(t)) {
-      // 単独数字＝次の項番号 → 表データ終了
-      cur.items.push(buf.join(' ')); rows.push(cur); cur = null; buf = [];
+      // 単独数字＝次の段落番号 → 表データ終了
+      cur.items.push(...buf); rows.push(cur); cur = null; buf = [];
+      stopIdx = ti;
       break;
     } else if (cur && phase === 1) { cur.bu = t; phase = 2; }
     else if (cur && phase === 2) { cur.kan = t; phase = 0; }
     else if (cur) { buf.push(t); }
   }
-  if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); }
-  return rows;
+  if (cur) { cur.items.push(...buf); rows.push(cur); }
+  const remainder = stopIdx < tokens.length ? tokens.slice(stopIdx).join(' ') : '';
+  return { rows, remainder };
 }
 
 function _renderShukanTbl(rows, q) {
@@ -313,8 +317,8 @@ function _renderShukanTbl(rows, q) {
     while (i + span < rows.length && rows[i + span].ministry === rows[i].ministry) span++;
     for (let j = 0; j < span; j++) {
       const r = rows[i + j];
-      const items = r.items.join(' ').split(/[、,]/).map(s => normalizeText(s.trim())).filter(Boolean);
-      const itemHtml = items.map(s => applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
+      const items = r.items.map(s => normalizeText(s.trim())).filter(Boolean);
+      const itemHtml = items.map(s => `<div class="ref-item">${applyQ(fmtLaw(escHtml(s)), q)}</div>`).join('');
       const minCell = j === 0
         ? `<td${span > 1 ? ` rowspan="${span}"` : ''}>${applyQ(escHtml(normalizeText(r.ministry)), q)}</td>`
         : '';
@@ -499,11 +503,11 @@ function formatContent(text, q) {
   if (rawText.includes('主管 部 款 項')) {
     const rawParts = rawText.split('主管 部 款 項');
     let html = rawParts[0] && rawParts[0].trim() ? fmtProse(rawParts[0], q) : '';
-    let allRows = [];
     for (let i = 1; i < rawParts.length; i++) {
-      allRows = allRows.concat(_parseShukanRows(rawParts[i]));
+      const { rows, remainder } = _parseShukanRows(rawParts[i]);
+      if (rows.length) html += _renderShukanTbl(rows, q);
+      if (remainder && remainder.trim()) html += fmtProse(remainder, q);
     }
-    if (allRows.length) html += _renderShukanTbl(allRows, q);
     return html;
   }
   if (rawText.includes('区分 限度額')) return parseLimitTable(rawText, q);
