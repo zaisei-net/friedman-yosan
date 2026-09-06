@@ -194,7 +194,13 @@ function _renderMinistryTbl(rows, headers, q) {
     while (i + span < rows.length && rows[i + span].ministry === rows[i].ministry) span++;
     for (let j = 0; j < span; j++) {
       const r = rows[i + j];
-      const items = splitTopLevel(normalizeText(r.items.join(' '))).filter(Boolean);
+      const rawJoined = r.items.join(' ');
+      let items;
+      if (/\s[イロハ]\s/.test(rawJoined)) {
+        items = rawJoined.split(/\s+(?=[イロハ]\s)/).map(s => normalizeText(s.trim())).filter(Boolean);
+      } else {
+        items = splitTopLevel(normalizeText(rawJoined)).filter(Boolean);
+      }
       const itemHtml = items.map(s=>`<div class="ref-item">${applyQ(breakPeriods(fmtLaw(escHtml(normalizeText(s)))),q)}</div>`).join('');
       const minCell = j === 0
         ? `<td${span > 1 ? ` rowspan="${span}"` : ''}>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td>`
@@ -263,7 +269,14 @@ function renderIyo1(text, q) {
   if (!rows.length) return fmtProse(text, q);
   let tbl = '<h4 class="ref-subtbl-title">第1表　各組織の間の移用</h4><div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>移用することができる組織</th></tr></thead><tbody>';
   for (const r of rows) {
-    tbl += `<tr><td style="vertical-align:top;white-space:nowrap">${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(fmtLaw(escHtml(normalizeText(r.content))),q)}</td></tr>`;
+    let contentHtml;
+    if (/\s[イロハ]\s/.test(r.content)) {
+      const subItems = r.content.split(/\s+(?=[イロハ]\s)/).map(s => normalizeText(s.trim())).filter(Boolean);
+      contentHtml = subItems.map(s => `<div class="ref-item">${applyQ(fmtLaw(escHtml(s)), q)}</div>`).join('');
+    } else {
+      contentHtml = applyQ(fmtLaw(escHtml(normalizeText(r.content))), q);
+    }
+    tbl += `<tr><td style="vertical-align:top;white-space:nowrap">${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${contentHtml}</td></tr>`;
   }
   return tbl + '</tbody></table></div>';
 }
@@ -278,8 +291,22 @@ function renderIyo2(text, q) {
 }
 
 function renderIyo3(text, q) {
-  const body = text.replace(/第\s*3\s*表　[^\d]*/, '');
-  return '<h4 class="ref-subtbl-title">第3表　各組織の間又は各項の間の移用</h4>' + fmtProse(body, q);
+  const body = text.replace(/第\s*3\s*表　[^\d]*/, '').trim();
+  let html = '<h4 class="ref-subtbl-title">第3表　各組織の間又は各項の間の移用</h4>';
+  const items = body.split(/\s+(?=\d+\s+[^\d])/);
+  if (items.length > 1) {
+    for (const item of items) {
+      const m = item.match(/^(\d+)\s+([\s\S]+)/);
+      if (m) {
+        html += `<div class="ref-clause ref-text"><span class="ref-item-num">${m[1]}</span>　${applyQ(breakPeriods(fmtLaw(escHtml(normalizeText(m[2].trim())))), q)}</div>`;
+      } else if (item.trim()) {
+        html += fmtProse(item, q);
+      }
+    }
+  } else {
+    html += fmtProse(body, q);
+  }
+  return html;
 }
 
 // 主管 部 款 項 形式（第10条 歳入表など）
@@ -460,9 +487,18 @@ function parseLimitTable(text, q) {
     if (lastNum < 0) {
       tbl += `<tr><td colspan="2">${applyQ(fmtLaw(escHtml(normalizeText(row.join(' ')))), q)}</td></tr>`;
     } else {
-      const desc = applyQ(fmtLaw(escHtml(normalizeText(row.slice(0, lastNum).join(' ')))), q);
-      const amt  = escHtml(row[lastNum]);
-      tbl += `<tr><td>${desc}</td><td style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${amt}</td></tr>`;
+      const descTokens = row.slice(0, lastNum);
+      const amt = escHtml(row[lastNum]);
+      const limitIdx = descTokens.reduce((li, t, i) => t.endsWith('限度') ? i : li, -1);
+      let descHtml;
+      if (limitIdx >= 0 && limitIdx < descTokens.length - 1) {
+        const lawPart = applyQ(fmtLaw(escHtml(normalizeText(descTokens.slice(0, limitIdx + 1).join(' ')))), q);
+        const descrPart = escHtml(normalizeText(descTokens.slice(limitIdx + 1).join(' ')));
+        descHtml = `${lawPart}<br><span style="color:var(--text-3);font-size:.85em">${descrPart}</span>`;
+      } else {
+        descHtml = applyQ(fmtLaw(escHtml(normalizeText(descTokens.join(' ')))), q);
+      }
+      tbl += `<tr><td>${descHtml}</td><td style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${amt}</td></tr>`;
     }
   }
   tbl += '</tbody></table></div>';
