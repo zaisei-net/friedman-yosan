@@ -348,7 +348,12 @@ function breakPeriods(s) {
       out += c;
       if (nxt !== ')' && nxt !== '）') out += '<br>';
       i++;
-    } else { out += c; i++; }
+    } else {
+      out += c;
+      // 「をいい、」はリスト並列の区切りなので改行
+      if (c === '、' && out.slice(-4) === 'をいい、') out += '<br>';
+      i++;
+    }
   }
   return out;
 }
@@ -376,7 +381,7 @@ function fmtProse(text, q) {
       .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
       .replace(/第\s*(\d+)\s*条/g, '<strong>第$1条</strong>')
       .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>');
-    const pre = s.num ? `<span class="ref-item-num">${s.num}</span>&ensp;` : '';
+    const pre = s.num ? `<span class="ref-item-num">${s.num}</span>` : '';
     return `<div class="ref-clause ref-text">${pre}${applyQ(breakPeriods(h), q)}</div>`;
   }
 
@@ -430,7 +435,7 @@ function parseDebtTable(text, q) {
     const content = applyQ(
       breakPeriods(fmtLaw(escHtml(m[2].trim()))
         .replace(/[。｡]\s*(\d{1,2})\s+(?=[^\d０-９])/g,
-          (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)),
+          (_, n) => `。<br><span class="ref-item-num">${n}</span>`)),
       q
     );
     tbl += `<tr><td style="font-weight:700;white-space:nowrap;vertical-align:top">${escHtml(m[1])}</td><td>${content}</td></tr>`;
