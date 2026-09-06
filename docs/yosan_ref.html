@@ -186,10 +186,21 @@ function _parseMinistryRows(text) {
 
 function _renderMinistryTbl(rows, headers, q) {
   let tbl = `<div class="ref-tbl-wrap"><table><thead><tr>${headers.map(h=>`<th>${escHtml(h)}</th>`).join('')}</tr></thead><tbody>`;
-  for (const r of rows) {
-    const items = splitTopLevel(normalizeText(r.items.join(' '))).filter(Boolean);
-    const itemHtml = items.map(s=>`<div class="ref-item">${applyQ(fmtLaw(escHtml(normalizeText(s))),q)}</div>`).join('');
-    tbl += `<tr><td>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
+  // 同一所管の連続行数を先に計算してrowspanを付与
+  let i = 0;
+  while (i < rows.length) {
+    let span = 1;
+    while (i + span < rows.length && rows[i + span].ministry === rows[i].ministry) span++;
+    for (let j = 0; j < span; j++) {
+      const r = rows[i + j];
+      const items = splitTopLevel(normalizeText(r.items.join(' '))).filter(Boolean);
+      const itemHtml = items.map(s=>`<div class="ref-item">${applyQ(fmtLaw(escHtml(normalizeText(s))),q)}</div>`).join('');
+      const minCell = j === 0
+        ? `<td${span > 1 ? ` rowspan="${span}"` : ''}>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td>`
+        : '';
+      tbl += `<tr>${minCell}<td>${applyQ(escHtml(normalizeText(r.org)),q)}</td><td>${itemHtml}</td></tr>`;
+    }
+    i += span;
   }
   return tbl + '</tbody></table></div>';
 }
