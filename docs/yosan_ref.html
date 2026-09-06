@@ -330,13 +330,35 @@ function normalizeText(text) {
 }
 
 function breakPeriods(s) {
-  // 句点の直後（空白・タグを読み飛ばして）が閉じ括弧でなければ改行を挿入
-  let out = '', i = 0;
+  // Pass1: depth-0 の長い括弧ブロック（内容50字超）の開・閉位置を特定
+  const longOpen = new Set(), longClose = new Set();
+  {
+    let depth = 0; const stk = [];
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '<') { const e = s.indexOf('>', i); if (e >= 0) i = e; }
+      else if (c === '(' || c === '（') { stk.push({pos:i, depth}); depth++; }
+      else if ((c === ')' || c === '）') && depth > 0) {
+        depth--;
+        const o = stk.pop();
+        if (o && o.depth === 0 && i - o.pos - 1 > 50) { longOpen.add(o.pos); longClose.add(i); }
+      }
+    }
+  }
+  // Pass2: 改行挿入
+  let out = '', depth = 0, i = 0;
   while (i < s.length) {
     const c = s[i];
     if (c === '<') {
       const e = s.indexOf('>', i);
       if (e >= 0) { out += s.slice(i, e + 1); i = e + 1; } else { out += c; i++; }
+    } else if (c === '(' || c === '（') {
+      if (longOpen.has(i) && out.trim()) out += '<br>';
+      depth++; out += c; i++;
+    } else if (c === ')' || c === '）') {
+      depth--; out += c;
+      if (longClose.has(i)) out += '<br>';
+      i++;
     } else if (c === '。' || c === '｡') {
       let j = i + 1;
       while (j < s.length) {
@@ -344,14 +366,15 @@ function breakPeriods(s) {
         else if (s[j] === ' ' || s[j] === '　') j++;
         else break;
       }
-      const nxt = s[j] || '';
       out += c;
-      if (nxt !== ')' && nxt !== '）') out += '<br>';
+      if ((s[j] || '') !== ')' && (s[j] || '') !== '）') out += '<br>';
       i++;
     } else {
       out += c;
-      // 「をいい、」はリスト並列の区切りなので改行
-      if (c === '、' && out.slice(-4) === 'をいい、') out += '<br>';
+      if (c === '、') {
+        if (out.slice(-4) === 'をいい、') out += '<br>';
+        else if (depth === 0 && out.slice(-2) === 'は、') out += '<br>';
+      }
       i++;
     }
   }
