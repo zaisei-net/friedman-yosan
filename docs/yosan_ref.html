@@ -77,10 +77,11 @@ input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .ref-sec mark{background:var(--amber-lt);color:var(--amber)}
 .ref-text{font-size:.84rem;line-height:1.8;color:var(--text-2)}
 .ref-text br{display:block;content:"";margin-top:.15rem}
-.ref-tbl-wrap{overflow-x:auto;margin:.6rem 0}
+.ref-tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:60vh;margin:.6rem 0}
 .ref-tbl-wrap table{border-collapse:collapse;font-size:.78rem;width:100%;min-width:480px}
 .ref-tbl-wrap th{text-align:left;padding:.3rem .6rem;background:var(--surface);
-  font-weight:700;border:1px solid var(--border);white-space:nowrap;color:var(--text-3);font-size:.7rem}
+  font-weight:700;border:1px solid var(--border);white-space:nowrap;color:var(--text-3);font-size:.7rem;
+  position:sticky;top:0;z-index:1}
 .ref-tbl-wrap td{padding:.3rem .6rem;border:1px solid var(--border);vertical-align:top;line-height:1.5}
 .ref-tbl-wrap td:first-child{font-weight:700;white-space:nowrap;color:var(--text)}
 .ref-tbl-wrap td:nth-child(2){white-space:nowrap;color:var(--text-2)}
@@ -168,7 +169,7 @@ function splitTopLevel(text) {
 function _parseMinistryRows(text) {
   const tokens = text.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
-  const ORG_PAT = /[省庁院局所館委員会部課署関府房]$/;
+  const ORG_PAT = /[省庁院局所館委員会部課署関府房ー]$/;
   const rows = []; let cur = null, buf = [];
   for (const t of tokens) {
     if (minSet.has(t)) {
@@ -194,7 +195,7 @@ function _renderMinistryTbl(rows, headers, q) {
     for (let j = 0; j < span; j++) {
       const r = rows[i + j];
       const items = splitTopLevel(normalizeText(r.items.join(' '))).filter(Boolean);
-      const itemHtml = items.map(s=>`<div class="ref-item">${applyQ(fmtLaw(escHtml(normalizeText(s))),q)}</div>`).join('');
+      const itemHtml = items.map(s=>`<div class="ref-item">${applyQ(breakPeriods(fmtLaw(escHtml(normalizeText(s)))),q)}</div>`).join('');
       const minCell = j === 0
         ? `<td${span > 1 ? ` rowspan="${span}"` : ''}>${applyQ(escHtml(normalizeText(r.ministry)),q)}</td>`
         : '';
@@ -329,14 +330,25 @@ function normalizeText(text) {
 }
 
 function breakPeriods(s) {
-  let out = '', depth = 0;
-  for (let i = 0; i < s.length; i++) {
+  // 句点の直後（空白・タグを読み飛ばして）が閉じ括弧でなければ改行を挿入
+  let out = '', i = 0;
+  while (i < s.length) {
     const c = s[i];
-    if (c === '<') { const e = s.indexOf('>', i); if (e >= 0) { out += s.slice(i, e+1); i = e; } else out += c; }
-    else if (c === '(' || c === '（') { depth++; out += c; }
-    else if (c === ')' || c === '）') { if (depth > 0) depth--; out += c; }
-    else if ((c === '。' || c === '｡') && depth === 0) { out += c + '<br>'; }
-    else out += c;
+    if (c === '<') {
+      const e = s.indexOf('>', i);
+      if (e >= 0) { out += s.slice(i, e + 1); i = e + 1; } else { out += c; i++; }
+    } else if (c === '。' || c === '｡') {
+      let j = i + 1;
+      while (j < s.length) {
+        if (s[j] === '<') { const e = s.indexOf('>', j); j = e >= 0 ? e + 1 : s.length; }
+        else if (s[j] === ' ' || s[j] === '　') j++;
+        else break;
+      }
+      const nxt = s[j] || '';
+      out += c;
+      if (nxt !== ')' && nxt !== '）') out += '<br>';
+      i++;
+    } else { out += c; i++; }
   }
   return out;
 }
