@@ -311,20 +311,18 @@ function _parseShukanRows(text) {
 
 function _renderShukanTbl(rows, q) {
   let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>主管</th><th>部</th><th>款</th><th>項</th></tr></thead><tbody>';
-  let i = 0;
-  while (i < rows.length) {
-    let span = 1;
-    while (i + span < rows.length && rows[i + span].ministry === rows[i].ministry) span++;
-    for (let j = 0; j < span; j++) {
-      const r = rows[i + j];
-      const items = r.items.map(s => normalizeText(s.trim())).filter(Boolean);
-      const itemHtml = items.map(s => `<div class="ref-item">${applyQ(fmtLaw(escHtml(s)), q)}</div>`).join('');
-      const minCell = j === 0
-        ? `<td${span > 1 ? ` rowspan="${span}"` : ''}>${applyQ(escHtml(normalizeText(r.ministry)), q)}</td>`
-        : '';
-      tbl += `<tr>${minCell}<td>${applyQ(escHtml(normalizeText(r.bu)), q)}</td><td>${applyQ(escHtml(normalizeText(r.kan)), q)}</td><td>${itemHtml}</td></tr>`;
-    }
-    i += span;
+  for (const r of rows) {
+    const items = r.items.map(s => normalizeText(s.trim())).filter(Boolean);
+    if (!items.length) items.push('');
+    items.forEach((item, j) => {
+      const itemHtml = applyQ(fmtLaw(escHtml(item)), q);
+      if (j === 0) {
+        const rs = items.length > 1 ? ` rowspan="${items.length}"` : '';
+        tbl += `<tr><td${rs}>${applyQ(escHtml(normalizeText(r.ministry)), q)}</td><td${rs}>${applyQ(escHtml(normalizeText(r.bu)), q)}</td><td${rs}>${applyQ(escHtml(normalizeText(r.kan)), q)}</td><td>${itemHtml}</td></tr>`;
+      } else {
+        tbl += `<tr><td>${itemHtml}</td></tr>`;
+      }
+    });
   }
   return tbl + '</tbody></table></div>';
 }
@@ -439,10 +437,15 @@ function parseLimitTable(text, q) {
   const tableText = idx >= 0 ? text.slice(idx + sep.length) : text;
   const tokens = tableText.trim().split(/\s+/);
   const rows = [];
-  let cur = [];
+  let cur = [], remainder = '';
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     const isNum = /^[\d,]+$/.test(t);
+    // Paragraph boundary: standalone digit followed by ｢ (paragraphs 2+ after the table)
+    if (cur.length === 0 && /^\d$/.test(t) && i + 1 < tokens.length && tokens[i+1].startsWith('｢')) {
+      remainder = tokens.slice(i).join(' ');
+      break;
+    }
     cur.push(t);
     if (isNum && (i + 1 >= tokens.length || !/^[\d,]+$/.test(tokens[i+1]))) {
       rows.push([...cur]); cur = [];
@@ -454,15 +457,17 @@ function parseLimitTable(text, q) {
     if (!row.length) continue;
     const lastNum = row.reduce((li, t, i) => /^[\d,]+$/.test(t) ? i : li, -1);
     if (lastNum < 0) {
-      tbl += `<tr><td colspan="2">${applyQ(fmtLaw(escHtml(row.join(' '))), q)}</td></tr>`;
+      tbl += `<tr><td colspan="2">${applyQ(fmtLaw(escHtml(normalizeText(row.join(' ')))), q)}</td></tr>`;
     } else {
-      const desc = applyQ(fmtLaw(escHtml(row.slice(0, lastNum).join(' '))), q);
+      const desc = applyQ(fmtLaw(escHtml(normalizeText(row.slice(0, lastNum).join(' ')))), q);
       const amt  = escHtml(row[lastNum]);
       tbl += `<tr><td>${desc}</td><td style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${amt}</td></tr>`;
     }
   }
   tbl += '</tbody></table></div>';
-  return (prose.trim() ? fmtProse(prose, q) : '') + tbl;
+  let html = (prose.trim() ? fmtProse(prose, q) : '') + tbl;
+  if (remainder) html += fmtProse('。' + remainder, q);
+  return html;
 }
 
 function parseDebtTable(text, q) {
@@ -470,13 +475,27 @@ function parseDebtTable(text, q) {
   const idx = text.indexOf(sep);
   const prose = idx > 0 ? text.slice(0, idx) : '';
   const tableText = idx >= 0 ? text.slice(idx + sep.length) : text;
-  const rowTexts = tableText.trim().split(/(?=\s\d+\s+[^\d\s])/);
+  // Split on row numbers only when followed by known entity name prefixes (avoids false splits on "第1項" etc.)
+  const EPAT_ALT = '株式会社|独立行政法人|預金保険機構|農水産業|原子力損害賠償|電力広域|脱炭素成長|社会保険診療|生命保険契約者|全国健康保険|地方公共団体|｢民間都市|｢中部国際';
+  const rowTexts = tableText.trim().split(new RegExp(`(?=\\s\\d{1,2}\\s+(?:${EPAT_ALT}))`));
+  // Extract prose paragraphs (2+) that follow the table in the last row segment
+  let prosePart = '';
+  if (rowTexts.length > 0) {
+    const lastRt = rowTexts[rowTexts.length - 1];
+    const pbRe = new RegExp(`(?:する金額|元本金額)\\s+(?=\\d+\\s+(?!${EPAT_ALT}))`);
+    const pbMatch = lastRt.match(pbRe);
+    if (pbMatch) {
+      const splitPos = pbMatch.index + pbMatch[0].length;
+      rowTexts[rowTexts.length - 1] = lastRt.slice(0, splitPos).trimEnd();
+      prosePart = lastRt.slice(splitPos).trim();
+    }
+  }
   let tbl = '<div class="ref-numtbl-wrap"><table><thead><tr><th>#</th><th>債務 ／ 根拠規定 ／ 金額</th></tr></thead><tbody>';
   for (const rt of rowTexts) {
     const m = rt.trim().match(/^(\d+)\s+(.+)/s);
     if (!m) continue;
     const content = applyQ(
-      breakPeriods(fmtLaw(escHtml(m[2].trim()))
+      breakPeriods(fmtLaw(escHtml(normalizeText(m[2].trim())))
         .replace(/[。｡]\s*(\d{1,2})\s+(?=[^\d０-９])/g,
           (_, n) => `。<br><span class="ref-item-num">${n}</span>　`)),
       q
@@ -484,7 +503,9 @@ function parseDebtTable(text, q) {
     tbl += `<tr><td style="font-weight:700;white-space:nowrap;vertical-align:top">${escHtml(m[1])}</td><td>${content}</td></tr>`;
   }
   tbl += '</tbody></table></div>';
-  return (prose.trim() ? fmtProse(prose, q) : '') + tbl;
+  let html = (prose.trim() ? fmtProse(prose, q) : '') + tbl;
+  if (prosePart) html += fmtProse('。' + prosePart, q);
+  return html;
 }
 
 function formatContent(text, q) {
