@@ -210,7 +210,7 @@ function parseKosaiTable(rawText, q) {
   if (m1) html += `<tr><td>建設公債（財政法第4条）</td><td>${escHtml(m1[1])}</td></tr>`;
   if (m2) html += `<tr><td>特例公債（特例法）</td><td>${escHtml(m2[1])}</td></tr>`;
   html += '</tbody></table></div>';
-  return html + fmtProse(normalizeText(rawText), q);
+  return html + fmtProse(rawText, q);
 }
 
 // 第16条: 予算の移用 (第1表〜第3表)
@@ -218,11 +218,11 @@ function parseIyoTable(rawText, q) {
   const markers = [];
   const re = /第\s*(\d)\s*表　/g; let m;
   while ((m = re.exec(rawText)) !== null) markers.push({n:+m[1], idx:m.index});
-  if (!markers.length) return fmtProse(normalizeText(rawText), q);
+  if (!markers.length) return fmtProse(rawText, q);
   markers[markers.length-1].end = rawText.length;
   for (let i=0;i<markers.length-1;i++) markers[i].end = markers[i+1].idx;
   const preamble = rawText.slice(0, markers[0].idx);
-  let html = preamble.trim() ? fmtProse(normalizeText(preamble), q) : '';
+  let html = preamble.trim() ? fmtProse(preamble, q) : '';
   for (const s of markers) {
     const chunk = rawText.slice(s.idx, s.end);
     if (s.n===1) html += renderIyo1(chunk, q);
@@ -250,7 +250,7 @@ function renderIyo1(text, q) {
     else if (cur) buf.push(t);
   }
   if (cur) rows.push({ministry:cur, content:buf.join(' ')});
-  if (!rows.length) return fmtProse(normalizeText(text), q);
+  if (!rows.length) return fmtProse(text, q);
   let tbl = '<h4 class="ref-subtbl-title">第1表　各組織の間の移用</h4><div class="ref-tbl-wrap"><table><thead><tr><th>所管</th><th>移用することができる組織</th></tr></thead><tbody>';
   for (const r of rows) {
     tbl += `<tr><td style="vertical-align:top;white-space:nowrap">${applyQ(escHtml(normalizeText(r.ministry)),q)}</td><td>${applyQ(fmtLaw(escHtml(normalizeText(r.content))),q)}</td></tr>`;
@@ -263,13 +263,13 @@ function renderIyo2(text, q) {
   const hdrIdx = text.indexOf(hdr);
   const body = hdrIdx >= 0 ? text.slice(hdrIdx + hdr.length) : text;
   const rows = _parseMinistryRows(_stripRowNums(body));
-  if (!rows.length) return fmtProse(normalizeText(text), q);
+  if (!rows.length) return fmtProse(text, q);
   return '<h4 class="ref-subtbl-title">第2表　各項の間の移用</h4>' + _renderMinistryTbl(rows, ['所管','組織','移用することができる項'], q);
 }
 
 function renderIyo3(text, q) {
   const body = text.replace(/第\s*3\s*表　[^\d]*/, '');
-  return '<h4 class="ref-subtbl-title">第3表　各組織の間又は各項の間の移用</h4>' + fmtProse(normalizeText(body), q);
+  return '<h4 class="ref-subtbl-title">第3表　各組織の間又は各項の間の移用</h4>' + fmtProse(body, q);
 }
 
 // 主管 部 款 項 形式（第10条 歳入表など）
@@ -320,15 +320,35 @@ function normalizeText(text) {
 }
 
 function fmtProse(text, q) {
-  const s = escHtml(normalizeText(text))
-    .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
-    .replace(/第\s*(\d+)\s*条/g, '<strong>第$1条</strong>')
-    .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>')
-    // 項番号を段落区切りとして別divに分割
-    .replace(/。\s*(\d{1,2})\s+(?=[^\d０-９])/g,
-      (_, n) => `。</div><div class="ref-clause ref-text"><span class="ref-item-num">${n}</span>&ensp;`)
-    .replace(/。(?!<)/g, '。<br>');
-  return `<div class="ref-clause ref-text">${applyQ(s, q)}</div>`;
+  // normalizeTextより先に項番号を検出（normalizeTextが「3 第」→「3第」にしてスペースを消すため）
+  const paraRe = /。\s*(\d{1,2})\s+(?=[^\d０-９])/g;
+  const bds = []; let bm;
+  while ((bm = paraRe.exec(text)) !== null)
+    bds.push({idx: bm.index, end: bm.index + bm[0].length, num: bm[1]});
+
+  // 境界でテキストを分割
+  const segs = [];
+  let pos = 0;
+  for (let i = 0; i < bds.length; i++) {
+    segs.push({num: null, text: text.slice(pos, bds[i].idx + 1)}); // ～。まで
+    const segEnd = i + 1 < bds.length ? bds[i+1].idx + 1 : text.length;
+    segs.push({num: bds[i].num, text: text.slice(bds[i].end, segEnd)});
+    pos = bds[i].end;
+  }
+  if (pos < text.length) segs.push({num: null, text: text.slice(pos)});
+
+  function renderSeg(s) {
+    const h = escHtml(normalizeText(s.text))
+      .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
+      .replace(/第\s*(\d+)\s*条/g, '<strong>第$1条</strong>')
+      .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>')
+      .replace(/。(?!<)/g, '。<br>');
+    const pre = s.num ? `<span class="ref-item-num">${s.num}</span>&ensp;` : '';
+    return `<div class="ref-clause ref-text">${pre}${applyQ(h, q)}</div>`;
+  }
+
+  const html = segs.filter(s => s.text.trim()).map(renderSeg).join('');
+  return html || `<div class="ref-clause ref-text"></div>`;
 }
 
 function parseLimitTable(text, q) {
@@ -393,7 +413,7 @@ function formatContent(text, q) {
   if (rawText.includes('所管 組織 項')) {
     const rawParts = rawText.split('所管 組織 項');
     const parts    = text.split('所管組織項');
-    let html = parts[0] && parts[0].trim() ? fmtProse(parts[0], q) : '';
+    let html = rawParts[0] && rawParts[0].trim() ? fmtProse(rawParts[0], q) : '';
     for (let i = 1; i < rawParts.length; i++) {
       const tblHtml = parseMinistryTable(rawParts[i], q);
       html += tblHtml || `<div class="ref-text">${applyQ(fmtLaw(escHtml(parts[i] || '')), q)}</div>`;
@@ -403,7 +423,7 @@ function formatContent(text, q) {
   if (rawText.includes('主管 部 款 項')) {
     const rawParts = rawText.split('主管 部 款 項');
     const parts    = text.split('主管部款項');
-    let html = parts[0] && parts[0].trim() ? fmtProse(parts[0], q) : '';
+    let html = rawParts[0] && rawParts[0].trim() ? fmtProse(rawParts[0], q) : '';
     for (let i = 1; i < rawParts.length; i++) {
       const tblHtml = parseShukanTable(rawParts[i], q);
       html += tblHtml || `<div class="ref-text">${applyQ(fmtLaw(escHtml(parts[i] || '')), q)}</div>`;
@@ -414,7 +434,7 @@ function formatContent(text, q) {
   if (rawText.includes('債務 根拠規定')) return parseDebtTable(rawText, q);
   if (rawText.includes('財政法｣第 4 条第 1 項ただし書')) return parseKosaiTable(rawText, q);
   if (rawText.includes('第 1 表　')) return parseIyoTable(rawText, q);
-  return fmtProse(text, q);
+  return fmtProse(rawText, q);
 }
 
 function _refPlaceholder(title, desc){
