@@ -169,7 +169,7 @@ function splitTopLevel(text) {
 function _parseMinistryRows(text) {
   const tokens = text.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
-  const ORG_PAT = /[省庁院局所館委員会部課署関府房ー]$/;
+  const ORG_PAT = /[省庁院局所館委員会部課署関府房ー議]$/;
   const rows = []; let cur = null, buf = [];
   for (const t of tokens) {
     if (minSet.has(t)) {
@@ -528,7 +528,7 @@ function formatContent(text, q) {
     for (let i = 1; i < rawParts.length; i++) {
       const { rows, remainder } = _parseShukanRows(rawParts[i]);
       if (rows.length) html += _renderShukanTbl(rows, q);
-      if (remainder && remainder.trim()) html += fmtProse(remainder, q);
+      if (remainder && remainder.trim()) html += fmtProse('。' + remainder, q);
     }
     return html;
   }
