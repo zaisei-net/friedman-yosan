@@ -438,16 +438,17 @@ function parseLimitTable(text, q) {
   const tokens = tableText.trim().split(/\s+/);
   const rows = [];
   let cur = [], remainder = '';
+  // isAmt: true only for actual monetary amounts (comma-formatted), not article numbers like "8" in 第8条
+  const isAmt = t => /^[\d,]+$/.test(t) && t.includes(',');
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    const isNum = /^[\d,]+$/.test(t);
     // Paragraph boundary: standalone digit followed by ｢ (paragraphs 2+ after the table)
     if (cur.length === 0 && /^\d$/.test(t) && i + 1 < tokens.length && tokens[i+1].startsWith('｢')) {
       remainder = tokens.slice(i).join(' ');
       break;
     }
     cur.push(t);
-    if (isNum && (i + 1 >= tokens.length || !/^[\d,]+$/.test(tokens[i+1]))) {
+    if (isAmt(t) && (i + 1 >= tokens.length || !isAmt(tokens[i+1]))) {
       rows.push([...cur]); cur = [];
     }
   }
