@@ -367,7 +367,7 @@ function fmtProse(text, q) {
     segs.push({num: null, text: text.slice(pos, bds[i].idx + 1)}); // ～。まで
     const segEnd = i + 1 < bds.length ? bds[i+1].idx + 1 : text.length;
     segs.push({num: bds[i].num, text: text.slice(bds[i].end, segEnd)});
-    pos = bds[i].end;
+    pos = segEnd; // segEnd まで進める（bds[i].end にすると次の null セグが重複する）
   }
   if (pos < text.length) segs.push({num: null, text: text.slice(pos)});
 
