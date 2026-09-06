@@ -324,8 +324,9 @@ function fmtProse(text, q) {
     .replace(/｢([^｣]+?)｣/g, (_, t) => `<span class="ref-law">「${t}」</span>`)
     .replace(/第\s*(\d+)\s*条/g, '<strong>第$1条</strong>')
     .replace(/第\s*(\d+)\s*表/g, '<br><strong>第$1表</strong>')
+    // 項番号を段落区切りとして別divに分割
     .replace(/。\s*(\d{1,2})\s+(?=[^\d０-９])/g,
-      (_, n) => `。<br><span class="ref-item-num">${n}</span>&ensp;`)
+      (_, n) => `。</div><div class="ref-clause ref-text"><span class="ref-item-num">${n}</span>&ensp;`)
     .replace(/。(?!<)/g, '。<br>');
   return `<div class="ref-clause ref-text">${applyQ(s, q)}</div>`;
 }
