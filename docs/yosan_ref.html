@@ -77,7 +77,7 @@ input:focus{outline:2px solid var(--accent);outline-offset:1px}
 .ref-sec mark{background:var(--amber-lt);color:var(--amber)}
 .ref-text{font-size:.84rem;line-height:1.8;color:var(--text-2)}
 .ref-text br{display:block;content:"";margin-top:.15rem}
-.ref-tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:60vh;margin:.6rem 0}
+.ref-tbl-wrap{overflow-x:auto;margin:.6rem 0}
 .ref-tbl-wrap table{border-collapse:collapse;font-size:.78rem;width:100%;min-width:480px}
 .ref-tbl-wrap th{text-align:left;padding:.3rem .6rem;background:var(--surface);
   font-weight:700;border:1px solid var(--border);white-space:nowrap;color:var(--text-3);font-size:.7rem;
@@ -283,30 +283,46 @@ function renderIyo3(text, q) {
 }
 
 // 主管 部 款 項 形式（第10条 歳入表など）
-function parseShukanTable(text, q) {
+function _parseShukanRows(text) {
   const tokens = text.trim().split(/\s+/);
   const minSet = new Set(REF_MINS);
   const rows = [];
-  let cur = null, buf = [], phase = 0; // phase: 0=items, 1=expect-bu, 2=expect-kan
+  let cur = null, buf = [], phase = 0;
   for (const t of tokens) {
     if (minSet.has(t)) {
       if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); buf = []; }
       cur = { ministry: t, bu: '', kan: '', items: [] };
       phase = 1;
+    } else if (cur && phase === 0 && /^\d$/.test(t)) {
+      // 単独数字＝次の項番号 → 表データ終了
+      cur.items.push(buf.join(' ')); rows.push(cur); cur = null; buf = [];
+      break;
     } else if (cur && phase === 1) { cur.bu = t; phase = 2; }
     else if (cur && phase === 2) { cur.kan = t; phase = 0; }
     else if (cur) { buf.push(t); }
   }
   if (cur) { cur.items.push(buf.join(' ')); rows.push(cur); }
-  if (rows.length === 0) return null;
+  return rows;
+}
+
+function _renderShukanTbl(rows, q) {
   let tbl = '<div class="ref-tbl-wrap"><table><thead><tr><th>主管</th><th>部</th><th>款</th><th>項</th></tr></thead><tbody>';
-  for (const r of rows) {
-    const items = r.items.join(' ').split(/[、,]/).map(s=>normalizeText(s.trim())).filter(Boolean);
-    const itemHtml = items.map(s=>applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
-    tbl += `<tr><td>${applyQ(escHtml(r.ministry),q)}</td><td>${applyQ(escHtml(normalizeText(r.bu)),q)}</td><td>${applyQ(escHtml(normalizeText(r.kan)),q)}</td><td>${itemHtml}</td></tr>`;
+  let i = 0;
+  while (i < rows.length) {
+    let span = 1;
+    while (i + span < rows.length && rows[i + span].ministry === rows[i].ministry) span++;
+    for (let j = 0; j < span; j++) {
+      const r = rows[i + j];
+      const items = r.items.join(' ').split(/[、,]/).map(s => normalizeText(s.trim())).filter(Boolean);
+      const itemHtml = items.map(s => applyQ(fmtLaw(escHtml(s)), q)).join('<br>');
+      const minCell = j === 0
+        ? `<td${span > 1 ? ` rowspan="${span}"` : ''}>${applyQ(escHtml(normalizeText(r.ministry)), q)}</td>`
+        : '';
+      tbl += `<tr>${minCell}<td>${applyQ(escHtml(normalizeText(r.bu)), q)}</td><td>${applyQ(escHtml(normalizeText(r.kan)), q)}</td><td>${itemHtml}</td></tr>`;
+    }
+    i += span;
   }
-  tbl += '</tbody></table></div>';
-  return tbl;
+  return tbl + '</tbody></table></div>';
 }
 
 function normalizeText(text) {
@@ -482,12 +498,12 @@ function formatContent(text, q) {
   }
   if (rawText.includes('主管 部 款 項')) {
     const rawParts = rawText.split('主管 部 款 項');
-    const parts    = text.split('主管部款項');
     let html = rawParts[0] && rawParts[0].trim() ? fmtProse(rawParts[0], q) : '';
+    let allRows = [];
     for (let i = 1; i < rawParts.length; i++) {
-      const tblHtml = parseShukanTable(rawParts[i], q);
-      html += tblHtml || `<div class="ref-text">${applyQ(fmtLaw(escHtml(parts[i] || '')), q)}</div>`;
+      allRows = allRows.concat(_parseShukanRows(rawParts[i]));
     }
+    if (allRows.length) html += _renderShukanTbl(allRows, q);
     return html;
   }
   if (rawText.includes('区分 限度額')) return parseLimitTable(rawText, q);
