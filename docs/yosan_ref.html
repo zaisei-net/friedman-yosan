@@ -503,7 +503,7 @@ function parseLimitTable(text, q) {
   }
   tbl += '</tbody></table></div>';
   let html = (prose.trim() ? fmtProse(prose, q) : '') + tbl;
-  if (remainder) html += fmtProse('。' + remainder, q);
+  if (remainder) html += fmtProse('。' + remainder, q).replace(/^<div\b[^>]*>。(?:<br\s*\/?>)?<\/div>/, '');
   return html;
 }
 
@@ -541,7 +541,7 @@ function parseDebtTable(text, q) {
   }
   tbl += '</tbody></table></div>';
   let html = (prose.trim() ? fmtProse(prose, q) : '') + tbl;
-  if (prosePart) html += fmtProse('。' + prosePart, q);
+  if (prosePart) html += fmtProse('。' + prosePart, q).replace(/^<div\b[^>]*>。(?:<br\s*\/?>)?<\/div>/, '');
   return html;
 }
 
