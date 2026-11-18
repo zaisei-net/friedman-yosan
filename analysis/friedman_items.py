@@ -791,7 +791,7 @@ def load_items(xlsx_path):
 
 def main():
     print("Excelを読み込み中...")
-    items = load_items(r"C:\Users\s1\projects\新しいフォルダー\r8_ippan.xlsx")
+    items = load_items(r"C:\Users\s1\projects\friedman-yosan\r8\r8_ippan.xlsx")
     print(f"科目数（項レベル）: {len(items)}")
 
     rows = []
@@ -837,7 +837,7 @@ def main():
         })
 
     # 出力
-    out = r"C:\Users\s1\projects\新しいフォルダー\friedman_items_r8.csv"
+    out = r"C:\Users\s1\projects\friedman-yosan\r8\friedman_items_r8.csv"
     fields = ["所管","組織","科目名","元額_億円","フリードマン根拠","残存割合","残す額_億円","削減額_億円","措置","理由"]
     with open(out, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=fields)

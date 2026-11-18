@@ -276,7 +276,7 @@ def load_moku(xlsx_path):
 
 def main():
     print("Excelを読み込み中...")
-    rows, unmatched = load_moku(r"C:\Users\s1\projects\新しいフォルダー\r8_ippan.xlsx")
+    rows, unmatched = load_moku(r"C:\Users\s1\projects\friedman-yosan\r8\r8_ippan.xlsx")
     print(f"目レベル行数: {len(rows)}")
 
     total_oku = sum(r["元額_億円"] for r in rows)
